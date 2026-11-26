@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#1b120a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>BEER</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="hud">
+    <div id="message">Tip your phone to drink</div>
+    <div id="count"></div>
+  </div>
+
+  <label id="sim" hidden>
+    Tilt <input id="sim-tilt" type="range" min="0" max="150" value="0">
+  </label>
+
+  <div id="start">
+    <h1>BEER</h1>
+    <p>Hold your phone like a pint, then tip it back.</p>
+    <button id="start-btn" type="button">Pour one</button>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
