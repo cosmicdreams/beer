@@ -25,15 +25,15 @@ prefilled discussion on GitHub, so the tester needs a GitHub login; set
 it anonymous.
 
 Open them directly with `?mods=`, for example `?drink=water&mods=lemon&ice=3`.
-The drink, its extras and a count per drink are kept in `localStorage`.
+The selected drink, its extras and ice count, and the number of finished glasses per drink are kept in `localStorage` for this browser profile.
 
 ## Core loop
 
 1. Tap **Pour one**; beer pours in from the top and the head settles.
 2. Hold the phone screen-out and tip the top edge to your lips. The beer
    surface stays level with the ground.
-3. Beer above the lower top corner spills out, which is you drinking it.
-4. Empty glass: hold it upright (or tap) for another.
+3. Liquid above the lower edge of the rim spills as you drink. Wine is served in a stemmed glass.
+4. Tap **Pour** to fill an empty glass, including after switching drinks. Pour beer upright for a fuller head or tilt the phone for less foam.
 
 ## Run it
 
