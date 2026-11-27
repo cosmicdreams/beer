@@ -13,7 +13,7 @@ along the bottom add things to the drink in the glass, one tap each:
 
 | Drink | Buttons |
 |---|---|
-| Water | Ice (minus and plus, none to five cubes), Lemon, Fizz |
+| Water | Ice (minus and plus, none to three big cubes), Lemon, Fizz |
 | Coffee | Creamer, Cold foam |
 | Root beer | Ice cream |
 | Wine | one button that cycles red, white, rosé |

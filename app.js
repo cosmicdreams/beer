@@ -641,10 +641,10 @@ function stepWavesZ(dt) {
 
 // ---------- ice cubes (3D glass) ----------
 
-const MAX_ICE = 5;
+const MAX_ICE = 3;        // three of these fill the glass top to bottom
 let ice = [];
 let iceDisp = 0;          // share of the glass's volume the ice pushes aside
-const iceSize = () => PW * 0.4;
+const iceSize = () => PW * 0.62;   // about as big as fits across the glass
 const glassRi = () => PW * 0.5 * 0.992 - 4.5;
 
 function savedIce() {
@@ -2599,7 +2599,7 @@ function renderActions() {
     return b;
   };
   if (drink.gl && drink.gl.mode3d && useGL) {
-    // Ice: minus and plus, from none to five cubes.
+    // Ice: minus and plus, from none to three big cubes.
     const wrap = document.createElement('div');
     wrap.className = 'stepper';
     const step = (label, name, onClick, disabled) => {

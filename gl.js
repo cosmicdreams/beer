@@ -490,7 +490,8 @@ vec3 roundNormal(vec3 pl, float h) {
   vec3 q = abs(pl) - (h - r);
   float m = max(q.x, max(q.y, q.z));
   vec3 n = m > 0.0 ? normalize(max(q, 0.0)) : step(vec3(m), q);
-  n = sign(pl) * n + 0.16 * (vec3(noise(pl.yz * 0.21), noise(pl.zx * 0.21 + 3.0), noise(pl.xy * 0.21 + 7.0)) - 0.5);
+  vec3 u = pl / h * 2.2;   // lumps scale with the cube
+  n = sign(pl) * n + 0.1 * (vec3(noise(u.yz), noise(u.zx + 3.0), noise(u.xy + 7.0)) - 0.5);
   return normalize(n);
 }
 
