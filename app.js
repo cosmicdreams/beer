@@ -10,6 +10,7 @@
 'use strict';
 
 const canvas = document.getElementById('scene');
+const glCanvas = document.getElementById('gl');
 let ctx = canvas.getContext('2d'); // swapped briefly to draw the head offscreen
 const messageEl = document.getElementById('message');
 const countEl = document.getElementById('count');
@@ -30,6 +31,7 @@ const params = new URLSearchParams(location.search);
 // foam cell tint), fizz, condensation, steam, and whether it earns a burp.
 const DRINKS = {
   beer: {
+    gl: { sigma: [0.15, 0.62, 2.3], back: [1.05, 0.88, 0.55], scatter: [0.05, 0.03, 0.0], bodyMix: 0.5, bodyGain: [1.05, 1.0, 0.92], flow: 0.012, caustic: [0.1, 0.08, 0.025], surfGlow: [0.12, 0.08, 0.0], surfGlowDepth: 40, tendrils: 0 },
     title: 'BEER', unit: ['beer', 'beers'], head: 'foam',
     body: ['#f9c53a', '#eea31c', '#cc760c', '#7a3a05'],
     glow: 'rgba(255, 224, 102, 0.42)', glowAt: 'center', band: '255, 215, 90', bandAlpha: 0.35,
@@ -38,6 +40,7 @@ const DRINKS = {
     headScale: 0.3, headLift: 0.22, rise: [0, 0], photoHaze: 'rgba(255, 210, 80, 0.2)', seam: '232, 184, 74', fresh: 0.11, fizz: 1, drops: 1, burp: true, pour: ['#c06a0e', '#f4b52a', '#ffe08a'],
   },
   butterbeer: {
+    gl: { sigma: [0.3, 0.95, 2.4], back: [1.0, 0.84, 0.52], scatter: [0.34, 0.22, 0.08], bodyMix: 0.55, bodyGain: [1.05, 1.0, 0.95], flow: 0.035, caustic: [0.08, 0.06, 0.02], surfGlow: [0.15, 0.1, 0.03], surfGlowDepth: 50, tendrils: 0.75 },
     title: 'BUTTERBEER', unit: ['butterbeer', 'butterbeers'], head: 'cream',
     body: ['#c8862e', '#b07228', '#8a4e16', '#4a2608'],
     glow: 'rgba(255, 214, 120, 0.34)', glowAt: 'center', band: '255, 236, 200', bandAlpha: 0,
@@ -46,6 +49,7 @@ const DRINKS = {
     headScale: 0.48, headWash: 'rgba(246, 229, 192, 0.45)', rise: [4, 0], swirl: true, seam: '243, 213, 155', fresh: 0.04, fizz: 0.45, drops: 1, burp: true, pour: ['#a8681e', '#e9b45c', '#fbe0a8'],
   },
   rootbeer: {
+    gl: { sigma: [2.2, 4.2, 6.0], back: [1.0, 0.72, 0.46], scatter: [0.02, 0.005, 0.0], bodyMix: 0.3, bodyGain: [1.0, 0.9, 0.85], flow: 0.03, caustic: [0.08, 0.03, 0.01], surfGlow: [0.26, 0.08, 0.02], surfGlowDepth: 55, tendrils: 0 },
     title: 'ROOT BEER', unit: ['root beer', 'root beers'], head: 'foam',
     body: ['#3a1206', '#1e0802', '#0f0401', '#070100'],
     glow: 'rgba(150, 60, 24, 0.55)', glowAt: 'surface', glowDepth: 60, band: '200, 120, 70', bandAlpha: 0,
@@ -54,6 +58,7 @@ const DRINKS = {
     headScale: 0.3, rise: [0, 0], darkMask: true, seam: '184, 124, 66', fresh: 0.07, fizz: 0.9, drops: 1, burp: true, pour: ['#1a0602', '#4a1a08', '#9a4a24'],
   },
   wine: {
+    gl: { sigma: [1.6, 5.5, 4.4], back: [1.0, 0.92, 0.88], scatter: [0.02, 0.0, 0.005], bodyMix: 0, bodyGain: [1, 1, 1], flow: 0, caustic: [0.16, 0.02, 0.05], surfGlow: [0.18, 0.02, 0.05], surfGlowDepth: 60, tendrils: 0, menLip: [0.78, 0.2, 0.32], menDark: [0.08, 0.0, 0.02], menGlint: [1.0, 0.85, 0.9] },
     title: 'WINE', unit: ['glass of wine', 'glasses of wine'], head: 'none',
     body: ['#8e1430', '#3c0612', '#2a0510', '#140105'],
     glow: 'rgba(196, 25, 63, 0.45)', glowAt: 'surface', glowDepth: 90, ruby: true, band: '140, 30, 60', bandAlpha: 0,
@@ -61,6 +66,7 @@ const DRINKS = {
     foam: 0, fresh: 0, fizz: 0, drops: 0, burp: false, pour: ['#3a0410', '#7a0e2a', '#d04a68'],
   },
   water: {
+    gl: { sigma: [0.14, 0.05, 0.035], back: [0.22, 0.25, 0.27], scatter: [0.0, 0.0, 0.0], bodyMix: 0, bodyGain: [1, 1, 1], flow: 0, caustic: [0.32, 0.36, 0.4], surfGlow: [0.03, 0.05, 0.06], surfGlowDepth: 40, tendrils: 0, menLip: [0.92, 0.97, 1.0], menDark: [0.2, 0.26, 0.3], menGlint: [1, 1, 1] },
     title: 'WATER', unit: ['glass of water', 'glasses of water'], head: 'none', clear: true,
     body: ['#a9c4cc', '#93b3bd', '#7c9ea9', '#5f8592'],
     glow: 'rgba(220, 240, 255, 0.12)', glowAt: 'surface', glowDepth: 60, band: '230, 245, 255', bandAlpha: 0,
@@ -71,6 +77,7 @@ const DRINKS = {
     foam: 0, fresh: 0, fizz: 0, drops: 1, burp: false, pour: ['#8fb4c2', '#d8eef5', '#ffffff'],
   },
   coffee: {
+    gl: { headTop: [0.74, 0.52, 0.32], headBot: [0.42, 0.24, 0.11], sigma: [3.4, 5.4, 7.0], back: [1.0, 0.78, 0.55], scatter: [0.0, 0.0, 0.0], bodyMix: 0.25, bodyGain: [1.0, 0.95, 0.9], flow: 0.03, caustic: [0.04, 0.02, 0.005], surfGlow: [0.2, 0.09, 0.03], surfGlowDepth: 60, tendrils: 0, creamCol: [0.9, 0.8, 0.66] },
     title: 'COFFEE', unit: ['coffee', 'coffees'], head: 'crema',
     body: ['#24120a', '#160a04', '#0d0602', '#060200'],
     glow: 'rgba(110, 44, 11, 0.55)', glowAt: 'surface', glowDepth: 70, band: '150, 95, 55', bandAlpha: 0,
@@ -79,7 +86,7 @@ const DRINKS = {
     headScale: 0.2, headTint: 'rgba(120, 61, 20, 0.3)', bodyTint: 'rgba(16, 7, 2, 0.4)', caustic: '143, 69, 24', causticAlpha: 0.08, fresh: 0.003, fizz: 0, drops: 0, steam: true, burp: false, pour: ['#0d0602', '#2b1608', '#6a3e1e'],
   },
 };
-const drinkName = DRINKS[params.get('drink')] ? params.get('drink') : (loadDrink() || 'beer');
+let drinkName = DRINKS[params.get('drink')] ? params.get('drink') : (loadDrink() || 'beer');
 
 // Modifiers: optional extras per drink, chosen on the start screen. Each one
 // returns overrides for the drink's settings.
@@ -88,11 +95,13 @@ const MODS = {
     creamer: { label: 'Creamer', apply: () => ({
       body: ['#6b4024', '#56331b', '#3e2412', '#23140a'], bodyTint: 'rgba(40, 22, 10, 0.15)',
       creamClouds: 'rgba(236, 214, 182, 1)', glow: 'rgba(170, 110, 60, 0.45)',
+      gl: { cream: true, creamCol: [0.9, 0.8, 0.66], sigma: [1.8, 2.7, 3.6], scatter: [0.16, 0.1, 0.05] },
     }) },
     coldfoam: { label: 'Cold foam', apply: () => ({
       head: 'cream', foam: 0.06, headTex: 'beer-head', headScale: 0.32, headLift: 0.28,
       headTint: null, foamShade: ['#fffdf8', '#f8f1e4', '#e9dcc3'], speck: '255, 255, 255', grain: '200, 180, 150',
       seam: '214, 190, 160', fresh: 0.02, steam: false,
+      gl: { tendrils: 0.8 },
     }) },
   },
   water: {
@@ -104,6 +113,7 @@ const MODS = {
     float: { label: 'Ice cream float', apply: () => ({
       float: true, foam: 0.1, fresh: 0.05, foamShade: ['#fbf3e2', '#efdcb8', '#d6b585'], headLift: 0.2,
       creamClouds: 'rgba(240, 222, 190, 1)', creamTop: true,
+      gl: { cream: true, creamMax: 0.55, creamTop: true, creamCol: [0.93, 0.86, 0.74], tendrils: 0.5 },
     }) },
   },
   wine: {
@@ -113,6 +123,7 @@ const MODS = {
       body: ['#f2e2a0', '#e6cf7c', '#d6b65a', '#a8822e'], glow: 'rgba(255, 244, 190, 0.45)',
       edge: '240, 214, 140', caustic: '255, 248, 210', causticAlpha: 0.16, ruby: false, drops: 0.6,
       meniscus: { lip: '255, 246, 214', dark: '90, 70, 20', glint: '255, 255, 240' }, legTint: '220, 190, 110',
+      gl: { sigma: [0.1, 0.24, 1.15], back: [0.6, 0.55, 0.45], caustic: [0.22, 0.2, 0.1], surfGlow: [0.06, 0.05, 0.01], menLip: [1.0, 0.96, 0.8], menDark: [0.3, 0.25, 0.1], menGlint: [1, 1, 0.94] },
       pour: ['#a8822e', '#e6cf7c', '#fff4c8'], clear: true, clearTint: 'rgba(240, 205, 90, 0.4)', clearGlow: 'rgba(150, 120, 30, 0.55)',
     }) },
     rose: { label: 'Rosé', group: 'wine', apply: () => ({
@@ -120,14 +131,29 @@ const MODS = {
       body: ['#f4a3a8', '#e5848f', '#cc6377', '#8e3a4e'], glow: 'rgba(255, 190, 200, 0.45)',
       edge: '245, 160, 170', caustic: '255, 214, 220', causticAlpha: 0.16, ruby: false, drops: 0.6,
       meniscus: { lip: '255, 220, 226', dark: '110, 40, 55', glint: '255, 250, 252' }, legTint: '230, 130, 150',
+      gl: { sigma: [0.15, 1.1, 0.75], back: [0.6, 0.55, 0.55], caustic: [0.24, 0.12, 0.14], surfGlow: [0.08, 0.02, 0.03], menLip: [1.0, 0.82, 0.86], menDark: [0.35, 0.12, 0.18], menGlint: [1, 0.96, 0.97] },
       pour: ['#8e3a4e', '#e5848f', '#ffd6dc'], clear: true, clearTint: 'rgba(236, 110, 132, 0.42)', clearGlow: 'rgba(160, 60, 80, 0.5)',
     }) },
   },
 };
-const activeMods = readMods();
-const drink = Object.assign({}, DRINKS[drinkName] || DRINKS.beer,
-  ...activeMods.map(id => MODS[drinkName][id].apply()));
-const FOAM = drink.foam;    // settled head height, as a share of screen height
+let activeMods = readMods();
+let drink = composeDrink(drinkName, activeMods);
+
+// A drink with its modifiers applied. The `gl` look is merged key by key.
+function composeDrink(name, mods) {
+  const base = DRINKS[name] || DRINKS.beer;
+  const out = Object.assign({}, base);
+  out.gl = Object.assign({}, base.gl);
+  for (const id of mods) {
+    const o = MODS[name][id].apply();
+    const gl = o.gl;
+    delete o.gl;
+    Object.assign(out, o);
+    if (gl) Object.assign(out.gl, gl);
+  }
+  return out;
+}
+let FOAM = drink.foam;      // settled head height, as a share of screen height
 
 let dpr = 1, W = 0, H = 0, PW = 0, PH = 0, screenAngle = 0, D = 0;
 let targetAngle = 0;        // gravity direction on screen, 0 = straight down
@@ -161,6 +187,7 @@ let cloudTile = null;   // creamer / melting ice cream clouds, tinted
 let foamShift = 0;      // how far the head has slid sideways with the slosh
 let liquidShift = 0;    // the same for the liquid photo
 let pops = [];
+let creamAmt = 0;       // how much creamer has poured in, 0 to 1
 let legs = [];
 let legTimer = 0;
 let lastTopY = null;     // screen y of the wine's highest wet point, to spot it falling
@@ -170,6 +197,8 @@ let seamDots = [];
 let edgeBeads = [];
 
 // ---------- layout and textures ----------
+
+let useGL = false;
 
 function layout() {
   dpr = Math.min(3, window.devicePixelRatio || 1);
@@ -183,6 +212,11 @@ function layout() {
   PH = turned ? W : H;
   D = Math.hypot(PW, PH);
   sprites = buildSprites();
+  if (useGL) {
+    const gdpr = Math.min(2, dpr);
+    GLR.resize(Math.round(W * gdpr), Math.round(H * gdpr));
+    GLR.setTexture('room', sprites.room);
+  }
   sites = Array.from({ length: 11 }, (_, i) => ({
     x: PW * (0.1 + 0.8 * ((i * 0.618 + 0.13) % 1)),
     y: PH * (0.45 + 0.5 * ((i * 0.381 + 0.27) % 1)),
@@ -544,9 +578,48 @@ function foamHeight() {
 }
 
 // Surface ripple, in the liquid frame.
+// The surface is a small wave simulation across the glass: tilting, stopping,
+// shaking or tapping sends waves that run to the walls, bounce and settle, and
+// a faint tremor keeps it from ever going perfectly still.
+const WN = 64;
+const waveH = new Float32Array(WN);
+const waveV = new Float32Array(WN);
+let prevAngleV = 0;
+let shake = 0;
+
+function stepWaves(dt) {
+  const acc = (angleV - prevAngleV) / dt;
+  prevAngleV = angleV;
+  const steps = 4, h = dt / steps;
+  for (let n = 0; n < steps; n++) {
+    for (let i = 0; i < WN; i++) {
+      const l = waveH[i > 0 ? i - 1 : 1], r = waveH[i < WN - 1 ? i + 1 : WN - 2];
+      const x = i / (WN - 1) - 0.5;
+      waveV[i] += ((l + r - 2 * waveH[i]) * 900 - waveV[i] * 1.4 - Math.max(-80, Math.min(80, acc)) * x * 5) * h;
+    }
+    for (let i = 0; i < WN; i++) waveH[i] += waveV[i] * h;
+  }
+  const amb = 3 + shake * 120;
+  for (let k = 0; k < 2; k++) waveV[(Math.random() * WN) | 0] += (Math.random() - 0.5) * amb;
+  let m = 0;
+  for (let i = 0; i < WN; i++) m += waveH[i];
+  m /= WN;
+  for (let i = 0; i < WN; i++) waveH[i] = Math.max(-40, Math.min(40, waveH[i] - m));
+}
+
+// A ripple pushed in at liquid-frame x.
+function poke(x, strength) {
+  const span = Math.max(1, surfR - surfL);
+  const c = (x - surfL) / span * (WN - 1);
+  for (let i = 0; i < WN; i++) waveV[i] -= strength * Math.exp(-((i - c) ** 2) / 6);
+}
+
 function wave(x) {
-  return Math.sin(x * 0.009 + clock * 4) * slosh * 10
-    + Math.sin(x * 0.047 - clock * 2.1) * (0.4 + slosh * 4);
+  const span = Math.max(1, Math.min(D, surfR) - Math.max(-D, surfL));
+  const f = Math.max(0, Math.min(1, (x - Math.max(-D, surfL)) / span)) * (WN - 1);
+  const i = Math.floor(f), j = Math.min(WN - 1, i + 1);
+  return waveH[i] + (waveH[j] - waveH[i]) * (f - i)
+    + 0.35 * Math.sin(x * 0.11 + clock * 3.1) + 0.25 * Math.sin(x * 0.23 - clock * 4.3);
 }
 
 function foamTop(x) {
@@ -582,6 +655,12 @@ function update(dt) {
   angleV += (55 * d - 6 * angleV) * dt;
   angle = wrap(angle + angleV * dt);
   slosh = Math.max(slosh * Math.exp(-dt * 1.2), Math.min(1, Math.abs(angleV) / 2.5));
+  stepWaves(dt);
+  shake *= Math.exp(-dt * 3);
+  // Shaking a fizzy drink foams it up.
+  if (shake > 0.15 && drink.fizz > 0 && FOAM > 0.03 && beer > 0.05) foamExtra = Math.min(0.2, foamExtra + shake * dt * 0.25);
+  const creamTarget = drink.gl && drink.gl.cream ? (drink.gl.creamMax || 1) : 0;
+  creamAmt += (creamTarget - creamAmt) * Math.min(1, dt * (creamTarget ? 0.35 : 2));
 
   const poly = [[0, 0], [PW, 0], [PW, PH], [0, PH]].map(([x, y]) => toWorld(x, y));
   const total = PW * PH;
@@ -821,6 +900,7 @@ function updateLace(dt, level, draining) {
 // ---------- drawing ----------
 
 function draw(level) {
+  if (useGL) { drawGL(level); return; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.translate(W / 2, H / 2);
   ctx.rotate(-screenAngle * RAD);
@@ -875,6 +955,70 @@ function draw(level) {
   }
   drawSlides();
   ctx.drawImage(sprites.glass, 0, 0, PW, PH);
+  drawHud();
+}
+
+// WebGL path: the GPU draws the glass, drink, head, bubbles and condensation;
+// the 2D canvas on top adds the small things: lacing, legs, the pour,
+// floaters, popping foam, running drops and the HUD.
+const CONDMAP = { beer: [1, 1, 0.5], butterbeer: [-1, 1, 0.5], rootbeer: [1, 1, 0], water: [-1, 1, 0.2] };
+const hexRgb = h => h.match(/\w\w/g).map(v => parseInt(v, 16) / 255);
+
+function drawGL(level) {
+  const m = new DOMMatrix().translate(W / 2, H / 2).rotate(-screenAngle).translate(-PW / 2, -PH / 2);
+  const inv = m.inverse();
+  const g = drink.gl;
+  const foamH = drink.head === 'none' ? 0 : foamHeight();
+  const bub = new Float32Array(bubbles.length * 3);
+  bubbles.forEach((b, i) => { bub[i * 3] = b.x; bub[i * 3 + 1] = b.y; bub[i * 3 + 2] = b.r * Math.min(1, b.age * 5); });
+  const shade = drink.foamShade || ['#ffffff', '#ffffff', '#ffffff'];
+  const men = drink.meniscus;
+  const c3 = s => s.split(',').map(v => Number(v) / 255);
+  GLR.render({
+    dpr: Math.min(2, dpr), PW, PH, time: clock, angle, level, fill: beer > 0.002 ? 1 : 0,
+    inv: [inv.a, inv.b, 0, inv.c, inv.d, 0, inv.e, inv.f, 1],
+    fwd: [m.a, m.b, 0, m.c, m.d, 0, m.e, m.f, 1],
+    waves: waveH, wetL: Math.max(-D, surfL), wetR: Math.min(D, surfR), shift: liquidShift, grav: targetAngle,
+    condAmt: TEX.condensation ? 0.85 * drink.drops : 0, condMap: CONDMAP[drinkName] || [1, 1, 0.5],
+    hasBody: !!TEX.body && drink.photoAlpha !== 0, hasHead: !!TEX.head && foamH > 1, foamH,
+    foamShift, cream: creamAmt,
+    bubbles: bub, bubbleTint: c3(drink.bubbleTint || '255, 240, 200'),
+    look: {
+      clear: !!drink.clear, sigma: g.sigma, back: g.back, scatter: g.scatter, bodyMix: g.bodyMix,
+      bodyGain: g.bodyGain, flow: g.flow, caustic: g.caustic, creamCol: g.creamCol || [0.95, 0.9, 0.8],
+      creamTop: !!g.creamTop, surfGlow: g.surfGlow, surfGlowDepth: g.surfGlowDepth,
+      menLip: g.menLip || (men ? c3(men.lip) : [0.8, 0.2, 0.3]),
+      menDark: g.menDark || (men ? c3(men.dark) : [0.1, 0, 0]),
+      menGlint: g.menGlint || (men ? c3(men.glint) : [1, 0.9, 0.9]),
+      head: { foam: 1, cream: 2, crema: 3 }[drink.head] || 0, headScale: 1 / (drink.headScale || 0.3),
+      headTop: g.headTop || hexRgb(shade[0]), headBot: g.headBot || hexRgb(shade[2]), headLift: drink.headLift || 0.15,
+      tendrils: g.tendrils || 0, steam: !!drink.steam,
+    },
+  });
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.translate(W / 2, H / 2);
+  ctx.rotate(-screenAngle * RAD);
+  ctx.translate(-PW / 2, -PH / 2);
+  baseMatrix = ctx.getTransform();
+  if (drink.legs) drawLegs();
+  for (const l of lace) {
+    ctx.globalAlpha = Math.min(1, l.life * 1.6) * 0.85;
+    ctx.drawImage(sprites.blob, l.x - l.r, l.y - l.r, l.r * 2, l.r * 2);
+  }
+  ctx.globalAlpha = 1;
+  if (state === 'refilling') drawPour(level);
+  if (beer > 0) {
+    ctx.save();
+    ctx.translate(PW / 2, PH / 2);
+    ctx.rotate(-angle);
+    drawFloaters(level);
+    drawPops(level);
+    ctx.restore();
+  }
+  drawSlides();
   drawHud();
 }
 
@@ -1151,7 +1295,6 @@ function drawFloaters(level) {
   if (TEX.ice) {
     const img = TEX.ice, w = PW * 0.9, h = w * img.height / img.width;
     ctx.save();
-    ctx.globalCompositeOperation = 'screen';
     ctx.translate(liquidShift * 0.8, level + bob(1));
     ctx.rotate(angleV * 0.05);
     ctx.drawImage(img, -w / 2, -h * 0.45, w, h);
@@ -1529,6 +1672,8 @@ function drawHud() {
   else if (state === 'empty') text = 'Cheers! Hold it upright for another';
   else if (state === 'full' && !drankOnce) text = 'Tip it to your lips';
   if (messageEl.textContent !== text) messageEl.textContent = text;
+  const showExtras = startEl.hidden;
+  if (extrasBtn.hidden === showExtras) extrasBtn.hidden = !showExtras;
   messageEl.hidden = !text;
   const count = `${beersDrunk} ${drink.unit[beersDrunk === 1 ? 0 : 1]}`;
   if (countEl.textContent !== count) countEl.textContent = count;
@@ -1667,7 +1812,7 @@ async function start() {
 
 // Photo textures for this drink. Until they load, the drawn gradients show.
 function loadTextures() {
-  const want = { body: `${drinkName}-body` };
+  const want = { body: drink.bodyTex || `${drinkName}-body` };
   if (drink.photoAlpha === 0) delete want.body;
   if (drink.head !== 'none') want.head = drink.headTex || `${drinkName}-head`;
   if (drink.drops) want.condensation = 'condensation';
@@ -1679,12 +1824,18 @@ function loadTextures() {
     const img = new Image();
     img.onload = () => {
       TEX[key] = img;
-      if (key === 'head') headPattern = buildHeadPattern2(img);
+      if (key === 'head') {
+        headPattern = buildHeadPattern2(img);
+        if (useGL) GLR.setTexture('head', seamless(img, 'x'));
+      }
       if (key === 'body') {
         bodyTile = seamless(seamless(img, 'x'), 'y');
         bodyPattern = ctx.createPattern(bodyTile, 'repeat');
+        if (useGL) GLR.setTexture('body', bodyTile);
       }
+      if (key === 'condensation' && useGL) GLR.setTexture('cond', img);
       if (key === 'clouds') cloudTile = tintClouds(img, drink.creamClouds);
+      if (key === 'ice') TEX.ice = lumaAlpha(img);
     };
     img.src = `textures/${file}.${['lemon', 'scoop'].includes(key) ? 'png' : 'jpg'}`;
   }
@@ -1756,6 +1907,26 @@ function tintClouds(img, color) {
   return c;
 }
 
+// Photos shot on black (ice): brightness becomes opacity, so they can be laid
+// over anything without a black box.
+function lumaAlpha(img) {
+  const c = document.createElement('canvas');
+  c.width = img.width; c.height = img.height;
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height);
+  for (let i = 0; i < d.data.length; i += 4) {
+    const v = Math.max(d.data[i], d.data[i + 1], d.data[i + 2]);
+    d.data[i + 3] = Math.min(255, v * 1.4);
+    const k = v ? 255 / v : 0;
+    d.data[i] = Math.min(255, d.data[i] * k * 0.95);
+    d.data[i + 1] = Math.min(255, d.data[i + 1] * k * 0.97);
+    d.data[i + 2] = Math.min(255, d.data[i + 2] * k);
+  }
+  g.putImageData(d, 0, 0);
+  return c;
+}
+
 // Draw an image to cover the portrait screen, in screen coordinates.
 function drawCover(img, alignX = 0.5) {
   const k = Math.max(PW / img.width, PH / img.height);
@@ -1798,47 +1969,117 @@ function loadDrink() {
   try { return localStorage.getItem('beer.drink'); } catch { return null; }
 }
 
-// The start screen's drink picker reloads with ?drink=.
-function setupPicker() {
-  const modsEl = document.getElementById('mods');
+// Drink and extras chips, on the start screen and in the in-glass sheet.
+// Picking one switches live: no reload, and extras keep what's in the glass.
+const DRINK_LABELS = { beer: 'Beer', butterbeer: 'Butterbeer', rootbeer: 'Root beer', wine: 'Wine', coffee: 'Coffee', water: 'Water' };
+
+function renderChips(drinksEl, modsEl) {
+  drinksEl.textContent = '';
+  for (const [name, label] of Object.entries(DRINK_LABELS)) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.setAttribute('aria-pressed', String(name === drinkName));
+    b.addEventListener('click', () => { if (name !== drinkName) switchDrink(name, savedMods(name)); });
+    drinksEl.appendChild(b);
+  }
+  modsEl.textContent = '';
   const all = MODS[drinkName] || {};
   modsEl.hidden = !Object.keys(all).length;
   for (const [id, mod] of Object.entries(all)) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = mod.label;
-    const on = activeMods.includes(id) || (mod.group && !activeMods.some(m => all[m].group === mod.group) && id === 'red');
-    btn.setAttribute('aria-pressed', String(on));
-    btn.addEventListener('click', () => {
-      let next = activeMods.filter(m => m !== id && !(mod.group && all[m].group === mod.group));
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = mod.label;
+    const on = activeMods.includes(id) || (mod.group && id === 'red' && !activeMods.some(m => all[m].group === mod.group));
+    b.setAttribute('aria-pressed', String(on));
+    b.addEventListener('click', () => {
+      const next = activeMods.filter(m => m !== id && !(mod.group && all[m].group === mod.group));
       if (!on || mod.group) next.push(id);
-      try { localStorage.setItem(`beer.mods.${drinkName}`, JSON.stringify(next)); } catch { /* ignore */ }
-      const q = new URLSearchParams(location.search);
-      q.set('drink', drinkName);
-      q.set('mods', next.join(','));
-      location.search = q.toString();
+      switchDrink(drinkName, next);
     });
-    modsEl.appendChild(btn);
+    modsEl.appendChild(b);
   }
+}
+
+function savedMods(name) {
+  try { return JSON.parse(localStorage.getItem(`beer.mods.${name}`) || '[]').filter(id => (MODS[name] || {})[id]); } catch { return []; }
+}
+
+function setupPicker() {
+  renderChips(document.getElementById('picker'), document.getElementById('mods'));
+  renderChips(document.getElementById('sheet-drinks'), document.getElementById('sheet-mods'));
   document.getElementById('title').textContent = drink.title;
   document.title = drink.title;
-  for (const btn of document.querySelectorAll('[data-drink]')) {
-    btn.setAttribute('aria-pressed', String(btn.dataset.drink === drinkName));
-    btn.addEventListener('click', () => {
-      try { localStorage.setItem('beer.drink', btn.dataset.drink); } catch { /* ignore */ }
-      const q = new URLSearchParams(location.search);
-      q.set('drink', btn.dataset.drink);
-      location.search = q.toString();
-    });
+}
+
+// Change drink or extras in place. A new drink is poured fresh; a change of
+// extras keeps the glass as it is (creamer pours in, ice drops in).
+function switchDrink(name, mods) {
+  const fresh = name !== drinkName;
+  drinkName = name;
+  activeMods = mods;
+  drink = composeDrink(name, mods);
+  FOAM = drink.foam;
+  try {
+    localStorage.setItem('beer.drink', name);
+    localStorage.setItem(`beer.mods.${name}`, JSON.stringify(mods));
+  } catch { /* ignore */ }
+  const q = new URLSearchParams(location.search);
+  q.set('drink', name);
+  q.set('mods', mods.join(','));
+  history.replaceState(null, '', `?${q}`);
+  for (const k of Object.keys(TEX)) delete TEX[k];
+  headPattern = bodyPattern = bodyTile = cloudTile = null;
+  if (useGL) for (const k of ['body', 'head', 'cond']) GLR.setTexture(k, null);
+  sprites = buildSprites();
+  if (useGL) GLR.setTexture('room', sprites.room);
+  loadTextures();
+  beersDrunk = loadCount();
+  legs = [];
+  if (fresh) {
+    bubbles = [];
+    lace = [];
+    creamAmt = 0;
+    beer = 0;
+    foamExtra = 0;
+    if (!startEl.hidden) beer = FULL; else refill();
+  } else if (drink.fizz <= 0) {
+    bubbles = [];
   }
+  setupPicker();
 }
 
 // ---------- boot ----------
 
 document.getElementById('start-btn').addEventListener('click', start);
+const sheetEl = document.getElementById('sheet');
+const extrasBtn = document.getElementById('extras-btn');
+extrasBtn.addEventListener('click', e => { e.stopPropagation(); sheetEl.hidden = false; });
+document.getElementById('sheet-done').addEventListener('click', e => { e.stopPropagation(); sheetEl.hidden = true; });
+sheetEl.addEventListener('pointerdown', e => e.stopPropagation());
 setupPicker();
 loadTextures();
-canvas.addEventListener('click', () => { if (state === 'empty') refill(); });
+useGL = !params.has('gl') || params.get('gl') !== '0' ? GLR.init(glCanvas) : false;
+if (!useGL) glCanvas.hidden = true;
+canvas.addEventListener('pointerdown', e => {
+  if (state === 'empty') { refill(); return; }
+  // Tapping the glass sends a ripple and knocks loose a few bubbles.
+  const r = canvas.getBoundingClientRect();
+  const m = new DOMMatrix().translate(W / 2, H / 2).rotate(-screenAngle).translate(-PW / 2, -PH / 2).inverse();
+  const pt = m.transformPoint(new DOMPoint(e.clientX - r.left, e.clientY - r.top));
+  poke(toWorld(pt.x, pt.y).x, 120);
+  if (drink.fizz > 0) for (let i = 0; i < 25; i++) bubbles.push(newBubble(pt.x + (Math.random() - 0.5) * 40, pt.y + (Math.random() - 0.5) * 40, 1 + Math.random() * 1.5));
+});
+let lastAcc = null;
+window.addEventListener('devicemotion', e => {
+  const a = e.accelerationIncludingGravity;
+  if (!a || a.x == null) return;
+  if (lastAcc) {
+    const jerk = Math.hypot(a.x - lastAcc.x, a.y - lastAcc.y, a.z - lastAcc.z);
+    shake = Math.max(shake, Math.min(1, (jerk - 1.5) / 20));
+  }
+  lastAcc = { x: a.x, y: a.y, z: a.z };
+});
 window.addEventListener('resize', layout);
 if (screen.orientation) screen.orientation.addEventListener('change', layout);
 layout();

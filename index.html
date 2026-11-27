@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <canvas id="gl"></canvas>
   <canvas id="scene"></canvas>
 
   <div id="hud">
@@ -20,21 +21,22 @@
     Tilt <input id="sim-tilt" type="range" min="-180" max="180" value="0">
   </label>
 
+  <button id="extras-btn" type="button" hidden>Drinks &amp; extras</button>
+  <div id="sheet" hidden>
+    <div id="sheet-drinks" class="chips" role="group" aria-label="Pick a drink"></div>
+    <div id="sheet-mods" class="chips mods" role="group" aria-label="Extras"></div>
+    <button id="sheet-done" type="button">Done</button>
+  </div>
+
   <div id="start">
     <h1 id="title">BEER</h1>
-    <div id="picker" role="group" aria-label="Pick a drink">
-      <button type="button" data-drink="beer">Beer</button>
-      <button type="button" data-drink="butterbeer">Butterbeer</button>
-      <button type="button" data-drink="rootbeer">Root beer</button>
-      <button type="button" data-drink="wine">Wine</button>
-      <button type="button" data-drink="coffee">Coffee</button>
-      <button type="button" data-drink="water">Water</button>
-    </div>
+    <div id="picker" role="group" aria-label="Pick a drink"></div>
     <div id="mods" role="group" aria-label="Extras" hidden></div>
     <p>Hold your phone like a glass, screen facing out, and tip the top edge to your lips.</p>
     <button id="start-btn" type="button">Pour one</button>
   </div>
 
+  <script src="gl.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
