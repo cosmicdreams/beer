@@ -194,6 +194,9 @@ const floatState = {};  // per floater id: { fy, fv, landed }
 let drops = [];         // splash droplets, liquid frame
 let addPour = null;     // { kind: 'cream' | 'foam', t, x }
 let creamAge = 99;      // seconds since creamer started pouring
+let creamMix = 0;       // how well the cream is stirred in, 0 to 1
+let creamT = 0;         // cream's own clock: shaking speeds up its swirling
+let stir = 0;           // agitation from taps
 let creamOrigin = 0;    // liquid-frame x where it went in
 let foamGrow = 1;       // cold foam builds up as it is poured
 let pendingExtras = [];
@@ -685,6 +688,12 @@ function update(dt) {
   else if (drink.float) creamAmt = Math.min(creamMax, creamAmt + dt * 0.04);   // ice cream melts slowly
   else if (addPour && addPour.kind === 'cream') creamAmt = Math.min(creamMax, creamAmt + dt * 0.45);
   creamAge += dt;
+  // Sloshing, shaking and tapping stir the cream in; left alone it blends
+  // slowly on its own.
+  stir *= Math.exp(-dt * 2);
+  const agitation = Math.min(1, Math.abs(angleV) / 2 + shake * 2 + stir);
+  creamT += dt * (1 + agitation * 10);
+  if (creamAmt > 0.02 && !drink.float) creamMix = Math.min(1, creamMix + dt * (0.008 + agitation * 0.2));
   updateExtras(dt);
 
   const poly = [[0, 0], [PW, 0], [PW, PH], [0, PH]].map(([x, y]) => toWorld(x, y));
@@ -759,6 +768,7 @@ function addExtra(id) {
     creamAge = 0;
     creamOrigin = toWorld(addPour.x, 0).x;
     creamAmt = 0;
+    creamMix = 0;
     startPourSound('cream');
   } else if (id === 'coldfoam') {
     addPour = { kind: 'foam', t: 0, x: PW * 0.5 };
@@ -874,7 +884,7 @@ function refill() {
     if (id === 'float') floatState.scoop = { fy: -PH * 2, fv: 0, landed: false, delay: 1e9 };
   }
   if (pendingExtras.includes('coldfoam')) foamGrow = 0;
-  if (pendingExtras.includes('creamer')) creamAmt = 0;
+  if (pendingExtras.includes('creamer')) { creamAmt = 0; creamMix = 0; }
 }
 
 function inLiquid(x, y, level, margin) {
@@ -1155,7 +1165,7 @@ function drawGL(level) {
   const hasFloat = !!(TEX.lemon || TEX.ice || TEX.scoop) && drawFloatLayer(level);
   if (hasFloat) GLR.updateLayer('float', floatLayer);
   GLR.render({
-    hasFloat, condAbove: 0.08, creamFrom: [creamOrigin, creamAge], shear: Math.max(-3, Math.min(3, angleV)),
+    hasFloat, condAbove: 0.08, creamFrom: [creamOrigin, creamAge], creamMix, creamT, shear: Math.max(-3, Math.min(3, angleV)),
     scoop: TEX.scoop ? [PW * 0.08 + liquidShift * 0.5, level - foamH + PW * 0.05, PW * 0.18] : [0, 0, 0], creamAt: [PW * 0.08 + liquidShift * 0.5, 90],
     dpr: Math.min(2, dpr), PW, PH, time: clock, angle, level, fill: beer > 0.002 ? 1 : 0,
     inv: [inv.a, inv.b, 0, inv.c, inv.d, 0, inv.e, inv.f, 1],
@@ -1173,7 +1183,9 @@ function drawGL(level) {
       menDark: g.menDark || (men ? c3(men.dark) : [0.1, 0, 0]),
       menGlint: g.menGlint || (men ? c3(men.glint) : [1, 0.9, 0.9]),
       head: { foam: 1, cream: 2, crema: 3 }[drink.head] || 0, headScale: 1 / (drink.headScale || 0.3),
-      headTop: g.headTop || hexRgb(shade[0]), headBot: g.headBot || hexRgb(shade[2]), headLift: drink.headLift || 0.15,
+      // Stirred-in cream lightens the crema too.
+      headTop: (g.headTop || hexRgb(shade[0])).map((v, i) => v + ([0.8, 0.66, 0.5][i] - v) * (g.cream ? creamMix : 0)),
+      headBot: (g.headBot || hexRgb(shade[2])).map((v, i) => v + ([0.62, 0.47, 0.33][i] - v) * (g.cream ? creamMix : 0)), headLift: drink.headLift || 0.15,
       tendrils: g.tendrils || 0, steam: !!drink.steam,
       seamFizz: g.seamFizz || 0, ripple: g.ripple ?? 0.12, cremaGloss: g.cremaGloss || 0, wallGlow: g.wallGlow,
       noPops: drink.head === 'cream',
@@ -2447,6 +2459,7 @@ canvas.addEventListener('pointerdown', e => {
   const m = new DOMMatrix().translate(W / 2, H / 2).rotate(-screenAngle).translate(-PW / 2, -PH / 2).inverse();
   const pt = m.transformPoint(new DOMPoint(e.clientX - r.left, e.clientY - r.top));
   poke(toWorld(pt.x, pt.y).x, 280);
+  stir = Math.min(1, stir + 0.35);
   if (drink.fizz > 0) {
     for (let i = 0; i < 18; i++) {
       const a = Math.random() * Math.PI * 2, d = Math.pow(Math.random(), 0.6) * 90;

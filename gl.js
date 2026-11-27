@@ -71,7 +71,9 @@ uniform float uHasFloat;
 uniform float uSeamFizz;    // fine bright bubbles packed under a beer head
 uniform float uCondAbove;   // condensation strength on the dry glass above the drink
 uniform vec2 uCreamAt;      // liquid-frame x and width where cream melts from (float)
-uniform vec2 uCreamFrom;    // creamer: liquid-frame x it went in at, seconds since
+uniform vec2 uCreamFrom;
+uniform float uCreamMix;    // 0 = clouds, 1 = fully stirred in
+uniform float uCreamT;      // cream's own clock: runs faster while the glass is shaken    // creamer: liquid-frame x it went in at, seconds since
 uniform float uRipple;
 uniform float uCremaGloss;
 uniform sampler2D uBubbles;  // bubbles, drawn first into their own layer
@@ -168,9 +170,10 @@ void main() {
     // Cream: clouds that billow, curl and slowly blend in.
     if (uCream > 0.0) {
       vec2 q = uCreamTop > 0.5 ? vec2(w.x * 0.011, w.y * 0.0035) : w * 0.0032;
-      q.y -= t * 0.05;
+      float ct = uCreamT;
+      q.y -= ct * 0.05;
       q.x += uShear * max(0.0, depth) * 0.0015;
-      vec2 warp = vec2(fbm(q * 1.6 + t * 0.025), fbm(q * 1.6 - t * 0.02 + 3.7));
+      vec2 warp = vec2(fbm(q * 1.6 + ct * 0.025), fbm(q * 1.6 - ct * 0.02 + 3.7));
       float dens = fbm(q + 1.6 * warp);
       float lo = 0.6 - 0.3 * uCream;
       dens = smoothstep(lo, lo + 0.45, dens) * uCream;
@@ -189,9 +192,13 @@ void main() {
         float reach = exp(-dx * dx - dy * dy) * smoothstep(-20.0, 10.0, plunge - depth + 40.0);
         dens *= mix(reach * 1.6, 1.0, smoothstep(5.0, 16.0, age));
       }
+      // Stirring: the clouds lose their contrast and the whole drink turns
+      // an even milky brown.
+      dens *= 1.0 - uCreamMix;
       vec3 cream = uCreamCol * (0.75 + 0.25 * thick);
       liq = mix(liq, cream, clamp(dens, 0.0, 0.85));
-      liq = mix(liq, uCreamCol * 0.8, uCream * 0.18 * (uCreamTop > 0.5 ? exp(-max(0.0, depth) / 200.0) : 1.0));
+      float blend = uCreamTop > 0.5 ? 0.18 * exp(-max(0.0, depth) / 200.0) : 0.18 + 0.42 * uCreamMix;
+      liq = mix(liq, uCreamCol * (0.62 + 0.18 * thick), uCream * blend);
     }
 
     // Caustics, brightest just under the surface.
@@ -532,6 +539,8 @@ void main() {
     f1('uCondAbove', s.condAbove);
     v2('uCreamAt', s.creamAt[0], s.creamAt[1]);
     v2('uCreamFrom', s.creamFrom[0], s.creamFrom[1]);
+    f1('uCreamMix', s.creamMix);
+    f1('uCreamT', s.creamT);
     f1('uRipple', L.ripple);
     f1('uCremaGloss', L.cremaGloss || 0);
     v3('uWallGlow', L.wallGlow || [0, 0, 0]);
