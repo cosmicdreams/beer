@@ -66,7 +66,7 @@ const DRINKS = {
     foam: 0, fresh: 0, fizz: 0, drops: 0, burp: false, pour: ['#3a0410', '#7a0e2a', '#d04a68'],
   },
   water: {
-    gl: { ripple: 0.1, condAmt: 0.6, sigma: [0.06, 0.025, 0.015], back: [0.12, 0.14, 0.15], scatter: [0.0, 0.0, 0.0], bodyMix: 0, bodyGain: [1, 1, 1], flow: 0, caustic: [0.16, 0.18, 0.2], surfGlow: [0.03, 0.05, 0.06], surfGlowDepth: 40, tendrils: 0, menLip: [0.92, 0.97, 1.0], menDark: [0.2, 0.26, 0.3], menGlint: [1, 1, 1] },
+    gl: { ripple: 0.1, condAmt: 0.3, sigma: [0.06, 0.025, 0.015], back: [0.34, 0.38, 0.4], scatter: [0.0, 0.0, 0.0], bodyMix: 0, bodyGain: [1, 1, 1], flow: 0, caustic: [0.16, 0.18, 0.2], surfGlow: [0.03, 0.05, 0.06], surfGlowDepth: 40, tendrils: 0, menLip: [0.92, 0.97, 1.0], menDark: [0.2, 0.26, 0.3], menGlint: [1, 1, 1] },
     title: 'WATER', unit: ['glass of water', 'glasses of water'], head: 'none', clear: true,
     body: ['#a9c4cc', '#93b3bd', '#7c9ea9', '#5f8592'],
     glow: 'rgba(220, 240, 255, 0.12)', glowAt: 'surface', glowDepth: 60, band: '230, 245, 255', bandAlpha: 0,
@@ -124,7 +124,7 @@ const MODS = {
       body: ['#f2e2a0', '#e6cf7c', '#d6b65a', '#a8822e'], glow: 'rgba(255, 244, 190, 0.45)',
       edge: '240, 214, 140', caustic: '255, 248, 210', causticAlpha: 0.16, ruby: false, drops: 0.6,
       meniscus: { lip: '255, 246, 214', dark: '90, 70, 20', glint: '255, 255, 240' }, legTint: '220, 190, 110',
-      gl: { condAmt: 0.3, sigma: [0.03, 0.06, 0.35], back: [0.2, 0.19, 0.13], caustic: [0.1, 0.09, 0.05], surfGlow: [0.06, 0.05, 0.01], menLip: [1.0, 0.96, 0.8], menDark: [0.3, 0.25, 0.1], menGlint: [1, 1, 0.94] },
+      gl: { condAmt: 0.15, sigma: [0.02, 0.04, 0.28], back: [0.58, 0.56, 0.4], caustic: [0.1, 0.09, 0.05], surfGlow: [0.06, 0.05, 0.01], menLip: [1.0, 0.96, 0.8], menDark: [0.3, 0.25, 0.1], menGlint: [1, 1, 0.94] },
       pour: ['#a8822e', '#e6cf7c', '#fff4c8'], clear: true, clearTint: 'rgba(240, 205, 90, 0.4)', clearGlow: 'rgba(150, 120, 30, 0.55)', menLipHex: null,
     }) },
     rose: { label: 'Rosé', group: 'wine', apply: () => ({
@@ -132,7 +132,7 @@ const MODS = {
       body: ['#f4a3a8', '#e5848f', '#cc6377', '#8e3a4e'], glow: 'rgba(255, 190, 200, 0.45)',
       edge: '245, 160, 170', caustic: '255, 214, 220', causticAlpha: 0.16, ruby: false, drops: 0.6,
       meniscus: { lip: '255, 220, 226', dark: '110, 40, 55', glint: '255, 250, 252' }, legTint: '230, 130, 150',
-      gl: { condAmt: 0.25, sigma: [0.03, 0.42, 0.34], back: [0.18, 0.11, 0.13], caustic: [0.1, 0.06, 0.06], surfGlow: [0.08, 0.02, 0.03], menLip: [1.0, 0.82, 0.86], menDark: [0.35, 0.12, 0.18], menGlint: [1, 0.96, 0.97] },
+      gl: { condAmt: 0.12, sigma: [0.02, 0.34, 0.28], back: [0.62, 0.4, 0.44], caustic: [0.1, 0.06, 0.06], surfGlow: [0.08, 0.02, 0.03], menLip: [1.0, 0.82, 0.86], menDark: [0.35, 0.12, 0.18], menGlint: [1, 0.96, 0.97] },
       pour: ['#8e3a4e', '#e5848f', '#ffd6dc'], clear: true, clearTint: 'rgba(236, 110, 132, 0.42)', clearGlow: 'rgba(160, 60, 80, 0.5)',
     }) },
   },
@@ -607,7 +607,7 @@ function stepWaves(dt) {
       const lapH = waveH[im] + waveH[ip] - 2 * waveH[i];
       const lapV = waveV[im] + waveV[ip] - 2 * waveV[i];
       // Stiffness, damping, and viscosity that kills short ripples fastest.
-      waveV[i] += (lapH * 3600 - waveV[i] * 1.0 + lapV * 9 - Math.max(-80, Math.min(80, acc)) * x * 5) * h;
+      waveV[i] += (lapH * 3600 - waveV[i] * 0.4 + lapV * 3 - Math.max(-80, Math.min(80, acc)) * x * 5) * h;
     }
     for (let i = 0; i < WN; i++) waveH[i] += waveV[i] * h;
   }
@@ -772,7 +772,7 @@ function updateBubbles(dt, level) {
         s.wait = (0.04 + Math.random() * 0.12 + (Math.random() < 0.12 ? 0.35 : 0)) / drink.fizz;
         const x = s.x + (Math.random() - 0.5) * 3;
         if (bubbles.length < 420 && inLiquid(x, s.y, level, 12)) {
-          bubbles.push(newBubble(x, s.y, 0.45 + Math.random() * 0.4, true));
+          bubbles.push(newBubble(x, s.y, 0.7 + Math.random() * 0.5, true));
         }
       }
     }
@@ -788,7 +788,7 @@ function updateBubbles(dt, level) {
       return inLiquid(b.x, b.y, level, b.r + 2);
     }
     b.v = Math.min(b.chain ? 150 : 120, b.v + dt * 45);
-    b.r = Math.min(b.chain ? 2 : 2.4, b.r * (1 + dt * (b.chain ? 0.35 : 0.12)));
+    b.r = Math.min(b.chain ? 2.6 : 3, b.r * (1 + dt * (b.chain ? 0.35 : 0.12)));
     const wob = Math.sin(b.age * (b.chain ? 5 : 9) + b.phase) * (b.chain ? 4 : 10) * dt;
     b.x += ux * b.v * dt - uy * wob;
     b.y += uy * b.v * dt + ux * wob;
@@ -859,8 +859,6 @@ function drawLegs() {
     const end = l.y0 + l.len;
     // A wet film band where the wine was, a thin rivulet running down from it
     // with a lit left edge, and a heavier drop at its foot.
-    ctx.fillStyle = `rgba(${drink.legTint || '150, 25, 50'}, ${0.05 * a})`;
-    ctx.beginPath(); ctx.ellipse(l.x, l.y0, 14, 6, 0, 0, Math.PI * 2); ctx.fill();
     const film = ctx.createLinearGradient(0, l.y0, 0, end);
     const lt = drink.legTint || '150, 25, 50';
     film.addColorStop(0, `rgba(${lt}, ${0.06 * a})`);
@@ -902,7 +900,7 @@ function drawSlides() {
     for (let y = d.y0; y <= d.y; y += 4) ctx.lineTo(d.x + Math.sin(y * 0.05 + d.x) * 1.8 + Math.sin(y * 0.13) * 0.6, y);
     ctx.stroke();
     ctx.globalAlpha = a;
-    drawBead(ctx, d.x + Math.sin(d.y * 0.05) * 1.5, d.y, d.r);
+    drawBead(ctx, d.x + Math.sin(d.y * 0.05 + d.x) * 1.8 + Math.sin(d.y * 0.13) * 0.6, d.y, d.r);
     ctx.globalAlpha = 1;
   }
 }
@@ -1056,7 +1054,6 @@ function drawGL(level) {
     ctx.save();
     ctx.translate(PW / 2, PH / 2);
     ctx.rotate(-angle);
-    drawPops(level);
     ctx.restore();
   }
   drawSlides();
@@ -1373,7 +1370,15 @@ function drawFloatLayer(level) {
     const x = PW * (0.02 + 0.2 * i) + liquidShift * (0.7 + i * 0.15) + Math.sin(clock * (0.17 + i * 0.05) + i * 2) * 10;
     place(c, x, 0.36 + 0.04 * i, PW * (0.24 + 0.03 * (i % 2)), i * 1.7, 0.06 + 0.03 * i);
   });
-  if (TEX.lemon) place(TEX.lemon, -PW * 0.3 + liquidShift * 0.6 + Math.sin(clock * 0.13) * 8, 0.3, PW * 0.36, 3, 0.04);
+  if (TEX.lemon) {
+    const x = -PW * 0.3 + liquidShift * 0.6 + Math.sin(clock * 0.13) * 8;
+    const w = PW * 0.38, h = w * 0.42;
+    g.save();
+    g.translate(x, surf(x) + h * 0.05 + Math.sin(clock * 1.1 + 3) * 1.5);
+    g.rotate(Math.atan(slope(x)) * 0.8 - 0.12);
+    g.drawImage(TEX.lemon, -w / 2, -h / 2, w, h);
+    g.restore();
+  }
   if (TEX.scoop) {
     const x = PW * 0.08 + liquidShift * 0.5;
     const s = PW * 0.5;

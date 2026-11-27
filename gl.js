@@ -374,10 +374,12 @@ void main() {
   float dark = smoothstep(0.45, 0.75, r) * (1.0 - smoothstep(0.82, 0.95, r));
   float spec = 1.0 - smoothstep(0.0, 0.22, length(vLocal - vec2(-0.35, -0.38)));
   float crescent = smoothstep(0.55, 0.7, r) * (1.0 - smoothstep(0.78, 0.9, r)) * smoothstep(0.0, 0.6, vLocal.y);
-  float core = 1.0 - smoothstep(0.0, 0.85, r);
-  vec3 c = uTint * (0.35 + 0.25 * rim) * 0.6 + vec3(1.0) * spec + uTint * crescent * 0.3;
-  float a = clamp(core * 0.18 + rim * 0.22 + spec * 0.95, 0.0, 1.0);
-  c = mix(c, vec3(0.06, 0.03, 0.0), dark * 0.3);
+  // A visible sphere: dark refracting ring, a bright rim catching light on
+  // the upper left, a hot specular point, a faint caustic crescent below.
+  float lit = smoothstep(0.2, -0.8, dot(normalize(vLocal + 1e-4), vec2(0.7, 0.7)));
+  vec3 c = uTint * (0.3 + 0.9 * rim * lit) + vec3(1.0) * spec + uTint * crescent * 0.5;
+  float a = clamp(0.12 + rim * (0.35 + 0.5 * lit) + spec * 0.95 + dark * 0.35, 0.0, 1.0);
+  c = mix(c, vec3(0.05, 0.025, 0.0), dark * 0.55);
   outColor = vec4(c * a, a);
 }`;
 
