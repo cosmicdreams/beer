@@ -8,7 +8,7 @@
 
 const GLR = (() => {
   let gl = null, prog = null, bubbleProg = null, quad = null, bubbleBuf = null;
-  let loc = {}, bloc = {};
+  let loc = {}, bloc = {}, loc3 = {}, prog3d = null, waveTex = null;
   const tex = {};
   const WAVES = 128;
 
@@ -401,6 +401,287 @@ void main() {
   outColor = vec4(c * a, a);
 }`;
 
+
+  // ---- 3D glass: every pixel's line of sight is traced through a real
+  // cylinder of glass and water. Light reflects off the glass, bends into the
+  // water, mirrors off the underside of the surface, passes through ice, and
+  // bends out the back wall before it reaches the room behind.
+  const FRAG3D = `#version 300 es
+precision highp float;
+out vec4 outColor;
+
+uniform vec2 uRes;
+uniform float uDpr;
+uniform mat3 uInv;
+uniform vec2 uP;
+uniform float uT;
+uniform vec3 uG;            // gravity in the glass frame: x right, y down, z into the screen
+uniform float uLevel;       // the surface is where dot(q, uG) = uLevel (plus waves)
+uniform float uFill;
+uniform sampler2D uWaveTex; // 128 x 2: waves across the glass, and front to back
+uniform vec4 uRings[4];     // ripples: x, z, age, amplitude
+uniform sampler2D uRoom;
+uniform sampler2D uCond;
+uniform sampler2D uFloat;
+uniform sampler2D uBubbles;
+uniform float uHasFloat;
+uniform float uCondAmt;
+uniform vec3 uCondMap;
+uniform vec3 uSigma;
+uniform int uIceN;
+uniform vec3 uIcePos[5];
+uniform mat3 uIceRot[5];
+uniform float uIceSize;
+
+float R, Ri, eyeY, camC, zRoom;
+
+float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
+}
+float fresnel(float c, float f0) { return f0 + (1.0 - f0) * pow(1.0 - clamp(c, 0.0, 1.0), 5.0); }
+
+float waveRow(float f, int row) {
+  f = clamp(f, 0.0, 1.0) * 127.0;
+  int i = int(floor(f));
+  int j = min(i + 1, 127);
+  return mix(texelFetch(uWaveTex, ivec2(i, row), 0).r, texelFetch(uWaveTex, ivec2(j, row), 0).r, fract(f));
+}
+// How far the surface sits below its resting plane at (x, z). Negative = raised.
+float surf(vec2 xz) {
+  float h = waveRow(xz.x / (2.0 * Ri) + 0.5, 0) + waveRow(xz.y / (2.0 * Ri) + 0.5, 1);
+  for (int i = 0; i < 4; i++) {
+    vec4 r = uRings[i];
+    if (r.w > 0.0) {
+      float ph = length(xz - r.xy) - r.z * 230.0;
+      h -= r.w * exp(-r.z * 1.5) * sin(ph * 0.11) * exp(-ph * ph / 5000.0);
+    }
+  }
+  h += 0.4 * sin(xz.x * 0.09 + uT * 3.1) + 0.14 * sin(xz.y * 0.05 - uT * 2.7) + 0.1 * sin((xz.x + xz.y * 0.3) * 0.2 + uT * 4.3);
+  // The meniscus climbs the glass.
+  h -= 5.0 * exp(-max(0.0, Ri - length(xz)) / 7.0);
+  return h;
+}
+float depthAt(vec3 q) { return dot(q, uG) - uLevel - surf(q.xz); }
+
+// The room behind the glass, as a far wall.
+vec3 roomAt(vec3 P, vec3 d, float lod) {
+  float dz = max(d.z, 0.12);
+  vec2 hit = P.xy + d.xy / dz * (zRoom - P.z);
+  float m = (zRoom + R) / camC;
+  vec2 uv = vec2(hit.x / uP.x + 0.5, (hit.y + eyeY * m) / (1.0 + m) / uP.y + 0.5);
+  return textureLod(uRoom, uv, lod).rgb;
+}
+// The room in front of the glass (behind you), for reflections.
+vec3 envRefl(vec3 d, float lod) {
+  vec2 uv = vec2(0.5 - d.x * 0.55, 0.42 + d.y * 0.55);
+  return textureLod(uRoom, uv, lod).rgb * 0.6;
+}
+// An ice cube: a box with well-melted corners and a slightly lumpy skin.
+float sdIce(vec3 pl, float h) {
+  float r = h * 0.3;
+  vec3 q = abs(pl) - (h - r);
+  return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
+}
+vec3 roundNormal(vec3 pl, float h) {
+  float r = h * 0.3;
+  vec3 q = abs(pl) - (h - r);
+  float m = max(q.x, max(q.y, q.z));
+  vec3 n = m > 0.0 ? normalize(max(q, 0.0)) : step(vec3(m), q);
+  n = sign(pl) * n + 0.16 * (vec3(noise(pl.yz * 0.21), noise(pl.zx * 0.21 + 3.0), noise(pl.xy * 0.21 + 7.0)) - 0.5);
+  return normalize(n);
+}
+
+void main() {
+  vec2 css = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uDpr;
+  vec2 p = (uInv * vec3(css, 1.0)).xy;
+  float x = p.x - uP.x * 0.5, ys = p.y - uP.y * 0.5;
+  R = uP.x * 0.5 * 0.992;
+  Ri = R - 4.5;
+  eyeY = uP.y * 0.1;
+  camC = uP.y * 2.4;
+  zRoom = R * 3.6;
+
+  vec3 d = normalize(vec3(0.0, (ys - eyeY) / camC, 1.0));
+  vec3 o = vec3(x, ys, -R);
+  vec3 col;
+  bool wetFront = false;
+
+  if (abs(x) >= R) {
+    col = roomAt(o, d, 0.5);
+  } else {
+    // Front of the glass: a reflection of the room, stronger toward the edges.
+    float zf = -sqrt(R * R - x * x);
+    vec3 P = o + d * ((zf - o.z) / d.z);
+    vec3 n1 = vec3(P.x, 0.0, P.z) / R;
+    float F1 = fresnel(dot(-d, n1), 0.04);
+    col = envRefl(reflect(d, n1), 3.0) * F1;
+    vec3 thr = vec3(1.0 - F1);
+
+    if (abs(x) >= Ri) {
+      // Looking along the glass wall itself: dark, with a bright inner line.
+      col += thr * roomAt(P, d, 2.0) * 0.35;
+    } else {
+      float zi = -sqrt(Ri * Ri - x * x);
+      P = o + d * ((zi - o.z) / d.z);
+      vec3 n = vec3(P.x, 0.0, P.z) / Ri;
+      bool inW = uFill > 0.5 && depthAt(P) > 0.0;
+      wetFront = inW;
+      if (inW) d = refract(d, n, 1.0 / 1.33);
+      o = P + d * 0.5;
+      float lod = 0.6;
+      bool done = false;
+      float half1 = uIceSize * 0.5;
+
+      for (int step = 0; step < 6; step++) {
+        // Where this ray leaves through the glass wall.
+        float A = dot(d.xz, d.xz), B = dot(o.xz, d.xz), Cc = dot(o.xz, o.xz) - Ri * Ri;
+        float tC = A > 1e-6 ? (-B + sqrt(max(0.0, B * B - A * Cc))) / A : 1e5;
+        // Where it meets the water surface.
+        float tS = 1e6;
+        if (uFill > 0.5) {
+          float a0 = dot(o, uG) - uLevel, b0 = dot(d, uG);
+          if (abs(b0) > 1e-4) {
+            float t = -a0 / b0;
+            for (int k = 0; k < 2; k++) { vec3 q = o + d * t; t = -(a0 - surf(q.xz)) / b0; }
+            if (t > 0.6 && t < tC) tS = t;
+          }
+        }
+        // The nearest ice cube.
+        float tI = 1e6; int ik = -1;
+        for (int k = 0; k < 5; k++) {
+          if (k >= uIceN) break;
+          vec3 ol = (o - uIcePos[k]) * uIceRot[k], dl = d * uIceRot[k];
+          vec3 m = 1.0 / dl, nn = m * ol, kk = abs(m) * half1;
+          vec3 t1 = -nn - kk, t2 = -nn + kk;
+          float tN = max(max(t1.x, t1.y), t1.z), tF = min(min(t2.x, t2.y), t2.z);
+          if (tN < tF && tF > 0.6 && tN < tI) {
+            // Walk up to the rounded shape inside its box.
+            float t = max(tN, 0.6);
+            bool hit = false;
+            for (int j = 0; j < 14; j++) {
+              float dist = sdIce(ol + dl * t, half1);
+              if (dist < 0.35) { hit = true; break; }
+              t += dist;
+              if (t > tF) break;
+            }
+            if (hit && t > 0.6 && t < tI) { tI = t; ik = k; }
+          }
+        }
+        float tMin = min(tC, min(tS, tI));
+        if (inW) thr *= exp(-uSigma * tMin / R);
+
+        if (ik >= 0 && tI <= tMin) {
+          // Ice: nearly invisible under water, glassy above it. Its edges
+          // catch light, its core is cloudy, and it bends what's behind it.
+          vec3 q = o + d * tI;
+          vec3 cpos = uIcePos[ik]; mat3 Rm = uIceRot[ik];
+          vec3 pl = (q - cpos) * Rm;
+          vec3 nI = Rm * roundNormal(pl, half1);
+          bool wq = uFill > 0.5 && depthAt(q) > 0.0;
+          float Fi = fresnel(dot(-d, nI), wq ? 0.002 : 0.03) * (wq ? 0.4 : 1.0);
+          col += thr * Fi * envRefl(reflect(d, nI), 2.0) * 1.5;
+          thr *= 1.0 - Fi;
+          vec3 a = abs(pl) / half1;
+          float mid = a.x + a.y + a.z - max(a.x, max(a.y, a.z)) - min(a.x, min(a.y, a.z));
+          float edge = smoothstep(0.7, 1.0, mid);
+          col += thr * edge * vec3(0.8, 0.88, 0.95) * (wq ? 0.07 : 0.2);
+          col += thr * vec3(0.8, 0.9, 1.0) * 0.035;
+          vec3 di = refract(d, nI, (wq ? 1.33 : 1.0) / 1.31);
+          if (dot(di, di) < 1e-6) di = d;
+          vec3 dl = di * Rm;
+          vec3 tt = (sign(dl) * half1 - pl) / dl;
+          float tx = max(0.5, min(tt.x, min(tt.y, tt.z)));
+          vec3 qe = q + di * tx;
+          vec3 ple = (qe - cpos) * Rm;
+          vec3 nE = Rm * roundNormal(ple, half1);
+          // Trapped air and cracks: a cloudy heart.
+          float tc = clamp(dot(cpos - q, di), 0.0, tx);
+          vec3 mp = (q + di * tc - cpos) * Rm;
+          float dc = length(mp) / half1;
+          // Frozen-in air: a white heart with feathery streaks radiating from it.
+          float ang = atan(mp.y, mp.x) * 3.0 + mp.z * 0.08;
+          float streak = 0.6 + 0.8 * noise(vec2(ang, length(mp) * 0.09)) * noise(mp.xy * 0.3 + 7.0);
+          float core = exp(-dc * dc * 3.2) * streak;
+          core = clamp(core * (wq ? 0.75 : 0.9), 0.0, 0.85);
+          col += thr * core * vec3(0.86, 0.92, 0.98) * 0.75;
+          thr *= 1.0 - core * 0.6;
+          bool we = uFill > 0.5 && depthAt(qe) > 0.0;
+          vec3 dout = refract(di, -nE, 1.31 / (we ? 1.33 : 1.0));
+          if (dot(dout, dout) < 1e-6) dout = reflect(di, -nE);
+          d = dout; o = qe + d * 0.7; inW = we;
+          lod = max(lod, wq ? 1.2 : 2.0);
+          continue;
+        }
+        if (tS <= tMin) {
+          vec3 q = o + d * tS;
+          float e = 2.0;
+          float s0 = surf(q.xz);
+          vec3 grad = uG - vec3(surf(q.xz + vec2(e, 0.0)) - s0, 0.0, surf(q.xz + vec2(0.0, e)) - s0) / e;
+          vec3 Ns = -normalize(grad);   // points up, into the air
+          if (inW) {
+            vec3 r = refract(d, -Ns, 1.33);
+            if (dot(r, r) < 1e-6) { d = reflect(d, Ns); thr *= 0.97; }   // the underside mirrors
+            else { d = r; inW = false; }
+          } else {
+            float Fs = fresnel(dot(-d, Ns), 0.02);
+            col += thr * Fs * envRefl(reflect(d, Ns), 2.0) * 1.6;
+            thr *= 1.0 - Fs;
+            d = refract(d, Ns, 1.0 / 1.33);
+            inW = true;
+          }
+          o = q + d * 0.7;
+          continue;
+        }
+        // Out through the back wall.
+        vec3 q = o + d * tC;
+        vec3 n2 = vec3(q.x, 0.0, q.z) / Ri;
+        if (inW) {
+          vec3 r = refract(d, -n2, 1.33);
+          if (dot(r, r) < 1e-6) { d = reflect(d, n2); o = q + d * 0.7; thr *= 0.9; continue; }
+          d = r;
+        }
+        o = q; done = true;
+        break;
+      }
+      col += thr * roomAt(o, d, lod);
+      // Bubbles in sparkling water.
+      if (wetFront) { vec4 bub = texture(uBubbles, gl_FragCoord.xy / uRes); col = col * (1.0 - bub.a) + bub.rgb; }
+    }
+  }
+
+  // A slice of lemon or other floaters, drawn by app.js.
+  if (uHasFloat > 0.5) {
+    vec4 fl = texture(uFloat, p / uP);
+    if (wetFront) fl.rgb *= vec3(0.86, 0.92, 0.9);
+    col = mix(col, fl.rgb, fl.a);
+  }
+
+  // The glass wall seen edge-on: a dark band and bright lines.
+  float au = abs(x) / R;
+  col *= 1.0 - 0.28 * smoothstep(0.955, 0.985, au) * (1.0 - smoothstep(0.985, 1.0, au));
+  col += vec3(0.9, 0.93, 0.96) * (exp(-pow((au - 0.972) / 0.004, 2.0)) * 0.12 + exp(-pow((au - 0.995) / 0.003, 2.0)) * 0.2);
+
+  // Condensation: heavy where cold water is behind the glass.
+  if (uCondAmt > 0.0) {
+    vec2 cuv = p / uP;
+    if (uCondMap.x < 0.0) cuv.x = 1.0 - cuv.x;
+    float aspect = (uP.x / uP.y) / (768.0 / 1152.0);
+    cuv.x = (cuv.x - 0.5) * aspect + 0.5 + (uCondMap.z - 0.5) * (1.0 - aspect);
+    vec3 m = texture(uCond, cuv).rgb;
+    float above1 = texture(uCond, cuv - vec2(0.0, 0.004)).r;
+    float where = wetFront ? 1.0 : 0.06;
+    col *= 1.0 - clamp(above1 - m.r, 0.0, 1.0) * 0.7 * uCondAmt * where;
+    col = 1.0 - (1.0 - col) * (1.0 - m * 0.8 * uCondAmt * where);
+  }
+
+  float vig = smoothstep(1.25, 0.35, length((p / uP - 0.5) * vec2(1.0, 0.8)));
+  col *= 0.82 + 0.18 * vig;
+  outColor = vec4(col, 1.0);
+}`;
+
   function compile(type, src) {
     const s = gl.createShader(type);
     gl.shaderSource(s, src);
@@ -423,6 +704,7 @@ void main() {
       if (!gl) return false;
       prog = link(VERT, FRAG);
       bubbleProg = link(BVERT, BFRAG);
+      prog3d = link(VERT, FRAG3D);
     } catch (e) {
       console.warn('WebGL unavailable, using the 2D renderer:', e.message);
       gl = null;
@@ -435,6 +717,14 @@ void main() {
     const names = (src) => [...src.matchAll(/uniform\s+\w+\s+(\w+)/g)].map(m => m[1]);
     for (const n of names(FRAG)) loc[n] = gl.getUniformLocation(prog, n);
     for (const n of names(BVERT + BFRAG)) bloc[n] = gl.getUniformLocation(bubbleProg, n);
+    for (const n of names(FRAG3D)) loc3[n] = gl.getUniformLocation(prog3d, n);
+    waveTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, waveTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, 128, 2, 0, gl.RED, gl.FLOAT, new Float32Array(256));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     // Placeholders until the real textures arrive.
     for (const k of ['room', 'cond', 'body', 'head', 'float']) setTexture(k, null);
     return true;
@@ -454,7 +744,7 @@ void main() {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     }
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    const wrap = key === 'room' ? gl.CLAMP_TO_EDGE : gl.REPEAT;
+    const wrap = key === 'room' ? gl.MIRRORED_REPEAT : gl.REPEAT;
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
   }
@@ -614,5 +904,44 @@ void main() {
     gl.viewport(0, 0, W, H);
   }
 
-  return { init, setTexture, updateLayer, resize, render, rgb, WAVES, get ok() { return !!gl; } };
+  // The 3D glass. `s.waves` is 256 floats: 128 across, then 128 front to back.
+  function render3d(s) {
+    drawBubbles(s);
+    gl.useProgram(prog3d);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    const aPos = gl.getAttribLocation(prog3d, 'aPos');
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    gl.disable(gl.BLEND);
+    const L = loc3;
+    gl.uniform2f(L.uRes, gl.canvas.width, gl.canvas.height);
+    gl.uniform1f(L.uDpr, s.dpr);
+    gl.uniformMatrix3fv(L.uInv, false, s.inv);
+    gl.uniform2f(L.uP, s.PW, s.PH);
+    gl.uniform1f(L.uT, s.time);
+    gl.uniform3fv(L.uG, s.g);
+    gl.uniform1f(L.uLevel, s.level);
+    gl.uniform1f(L.uFill, s.fill);
+    gl.uniform4fv(L.uRings, s.rings);
+    gl.uniform1f(L.uHasFloat, s.hasFloat ? 1 : 0);
+    gl.uniform1f(L.uCondAmt, s.condAmt);
+    gl.uniform3fv(L.uCondMap, s.condMap);
+    gl.uniform3fv(L.uSigma, s.sigma);
+    gl.uniform1i(L.uIceN, s.iceN);
+    gl.uniform3fv(L.uIcePos, s.icePos);
+    gl.uniformMatrix3fv(L.uIceRot, false, s.iceRot);
+    gl.uniform1f(L.uIceSize, s.iceSize);
+    const bind = (unit, t, name) => { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); gl.uniform1i(L[name], unit); };
+    bind(0, tex.room, 'uRoom');
+    bind(1, tex.cond, 'uCond');
+    bind(2, tex.float, 'uFloat');
+    bind(3, bubbleTex, 'uBubbles');
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, waveTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 128, 2, gl.RED, gl.FLOAT, s.waves);
+    gl.uniform1i(L.uWaveTex, 4);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  return { init, setTexture, updateLayer, resize, render, render3d, rgb, WAVES, get ok() { return !!gl; } };
 })();

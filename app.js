@@ -66,7 +66,7 @@ const DRINKS = {
     foam: 0, fresh: 0, fizz: 0, drops: 0, burp: false, pour: ['#3a0410', '#7a0e2a', '#d04a68'],
   },
   water: {
-    gl: { ripple: 0.1, condAmt: 0.3, sigma: [0.06, 0.025, 0.015], back: [0.34, 0.38, 0.4], scatter: [0.0, 0.0, 0.0], bodyMix: 0, bodyGain: [1, 1, 1], flow: 0, caustic: [0.16, 0.18, 0.2], surfGlow: [0.03, 0.05, 0.06], surfGlowDepth: 40, tendrils: 0, menLip: [0.92, 0.97, 1.0], menDark: [0.2, 0.26, 0.3], menGlint: [1, 1, 1] },
+    gl: { mode3d: true, ripple: 0.1, condAmt: 0.3, sigma: [0.06, 0.025, 0.015], back: [0.34, 0.38, 0.4], scatter: [0.0, 0.0, 0.0], bodyMix: 0, bodyGain: [1, 1, 1], flow: 0, caustic: [0.16, 0.18, 0.2], surfGlow: [0.03, 0.05, 0.06], surfGlowDepth: 40, tendrils: 0, menLip: [0.92, 0.97, 1.0], menDark: [0.2, 0.26, 0.3], menGlint: [1, 1, 1] },
     title: 'WATER', unit: ['glass of water', 'glasses of water'], head: 'none', clear: true,
     body: ['#a9c4cc', '#93b3bd', '#7c9ea9', '#5f8592'],
     glow: 'rgba(220, 240, 255, 0.12)', glowAt: 'surface', glowDepth: 60, band: '230, 245, 255', bandAlpha: 0,
@@ -106,7 +106,6 @@ const MODS = {
     }) },
   },
   water: {
-    ice: { label: 'Ice', apply: () => ({ ice: true }) },
     lemon: { label: 'Lemon', apply: () => ({ lemon: true }) },
     sparkling: { label: 'Sparkling', apply: () => ({ fizz: 1.2, bubbleTint: '255, 255, 255', title: 'SPARKLING' }) },
   },
@@ -607,6 +606,132 @@ const waveH = new Float32Array(WN);
 const waveV = new Float32Array(WN);
 let prevAngleV = 0;
 let shake = 0;
+// Front-to-back slosh, for the phone tipping toward or away from you.
+const waveHz = new Float32Array(WN);
+const waveVz = new Float32Array(WN);
+const waveTexData = new Float32Array(WN * 2);
+let targetPitch = 0, pitch = 0, pitchV = 0, prevPitchV = 0;
+// Ripple rings on the surface (taps, things dropping in): at most four.
+let rings = [];
+function ring(x, z, amp) {
+  rings.push({ x, z, t: 0, amp });
+  if (rings.length > 4) rings.shift();
+}
+
+function stepWavesZ(dt) {
+  const acc = (pitchV - prevPitchV) / dt;
+  prevPitchV = pitchV;
+  const steps = 8, h = dt / steps;
+  for (let n = 0; n < steps; n++) {
+    for (let i = 0; i < WN; i++) {
+      const im = i > 0 ? i - 1 : 1, ip = i < WN - 1 ? i + 1 : WN - 2;
+      const x = i / (WN - 1) - 0.5;
+      const lapH = waveHz[im] + waveHz[ip] - 2 * waveHz[i];
+      const lapV = waveVz[im] + waveVz[ip] - 2 * waveVz[i];
+      waveVz[i] += (lapH * 3600 - waveVz[i] * 0.4 + lapV * 3 - Math.max(-80, Math.min(80, acc)) * x * 5) * h;
+    }
+    for (let i = 0; i < WN; i++) waveHz[i] += waveVz[i] * h;
+  }
+  for (let k = 0; k < 2; k++) waveVz[(Math.random() * WN) | 0] += (Math.random() - 0.5) * (3 + shake * 120);
+  let m = 0;
+  for (let i = 0; i < WN; i++) m += waveHz[i];
+  m /= WN;
+  for (let i = 0; i < WN; i++) waveHz[i] = Math.max(-40, Math.min(40, waveHz[i] - m));
+}
+
+// ---------- ice cubes (3D glass) ----------
+
+const MAX_ICE = 5;
+let ice = [];
+const iceSize = () => PW * 0.2;
+const glassRi = () => PW * 0.5 * 0.992 - 4.5;
+
+// Drop one more cube in. Returns false if the glass already holds five.
+function addIce(settled = false) {
+  if (ice.length >= MAX_ICE) return false;
+  const s = iceSize(), lim = glassRi() - s * 0.7;
+  let x = 0, z = 0;
+  for (let tries = 0; tries < 30; tries++) {
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * lim;
+    x = Math.cos(a) * r; z = Math.sin(a) * r;
+    if (ice.every(c => Math.hypot(c.x - x, c.z - z) > s * 1.1)) break;
+  }
+  ice.push({
+    x, z, vx: 0, vz: 0, fy: settled ? 0 : -PH * 0.8, fv: 0, landed: settled,
+    yaw: Math.random() * 6.28, yawV: (Math.random() - 0.5) * 1.5,
+    a: settled ? 0 : (Math.random() - 0.5), b: settled ? 0 : (Math.random() - 0.5),
+    av: settled ? 0 : 4 * (Math.random() - 0.5), bv: settled ? 0 : 4 * (Math.random() - 0.5),
+  });
+  return true;
+}
+
+let lastClink = 0;
+function clink(speed) {
+  const now = performance.now();
+  if (!audio || now - lastClink < 90) return;
+  lastClink = now;
+  blip(2400 + Math.random() * 1800, 2200 + Math.random() * 1400, 0.1, Math.min(0.09, speed / 1500));
+  if (navigator.vibrate) navigator.vibrate(8);
+}
+
+// Cubes fall, plunge, bob on a buoyancy spring, drift with the slosh, and
+// knock against each other and the glass.
+function updateIce(dt) {
+  const s = iceSize(), lim = glassRi() - s * 0.62;
+  for (const c of ice) {
+    if (!c.landed) {
+      c.fv += 1900 * dt;
+      c.fy += c.fv * dt;
+      c.a += c.av * dt;
+      c.b += c.bv * dt;
+      if (c.fy >= -s * 0.3) {
+        c.landed = true;
+        splash(c.x, FLOATER.ice, c.fv);
+        ring(c.x, c.z, 7);
+        c.fv *= 0.35;
+      }
+    } else {
+      c.fv += (-55 * c.fy - 5 * c.fv) * dt;
+      c.fy += c.fv * dt;
+      c.av += (-30 * c.a - 3 * c.av) * dt; c.a += c.av * dt;
+      c.bv += (-30 * c.b - 3 * c.bv) * dt; c.b += c.bv * dt;
+      c.vx += (-angleV * 70 - c.vx * 0.9 + (Math.random() - 0.5) * 8) * dt;
+      c.vz += (-pitchV * 70 - c.vz * 0.9 + (Math.random() - 0.5) * 8) * dt;
+    }
+    c.x += c.vx * dt;
+    c.z += c.vz * dt;
+    c.yaw += c.yawV * dt;
+    c.yawV *= Math.exp(-dt * 0.4);
+    const r = Math.hypot(c.x, c.z);
+    if (r > lim) {
+      const nx = c.x / r, nz = c.z / r;
+      c.x = nx * lim; c.z = nz * lim;
+      const vn = c.vx * nx + c.vz * nz;
+      if (vn > 0) { c.vx -= 1.4 * vn * nx; c.vz -= 1.4 * vn * nz; if (vn > 25 && c.landed) clink(vn); }
+    }
+  }
+  for (let i = 0; i < ice.length; i++) {
+    for (let j = i + 1; j < ice.length; j++) {
+      const a = ice[i], b = ice[j];
+      let dx = b.x - a.x, dz = b.z - a.z;
+      const d = Math.hypot(dx, dz) || 1, min = s * 1.08;
+      if (d >= min || Math.abs(a.fy - b.fy) > s) continue;
+      dx /= d; dz /= d;
+      const push = (min - d) / 2;
+      a.x -= dx * push; a.z -= dz * push; b.x += dx * push; b.z += dz * push;
+      const closing = (a.vx - b.vx) * dx + (a.vz - b.vz) * dz;
+      if (closing > 0) {
+        a.vx -= closing * dx * 0.7; a.vz -= closing * dz * 0.7;
+        b.vx += closing * dx * 0.7; b.vz += closing * dz * 0.7;
+        a.yawV += (Math.random() - 0.5) * closing * 0.02;
+        b.yawV += (Math.random() - 0.5) * closing * 0.02;
+        if (closing > 25) clink(closing);
+      }
+    }
+  }
+  for (const r of rings) r.t += dt;
+  rings = rings.filter(r => r.t < 3);
+}
 
 function stepWaves(dt) {
   const acc = (angleV - prevAngleV) / dt;
@@ -680,6 +805,10 @@ function update(dt) {
   angle = wrap(angle + angleV * dt);
   slosh = Math.max(slosh * Math.exp(-dt * 1.2), Math.min(1, Math.abs(angleV) / 2.5));
   stepWaves(dt);
+  pitchV += (55 * (targetPitch - pitch) - 6 * pitchV) * dt;
+  pitch += pitchV * dt;
+  stepWavesZ(dt);
+  updateIce(dt);
   shake *= Math.exp(-dt * 3);
   // Shaking a fizzy drink foams it up.
   if (shake > 0.15 && drink.fizz > 0 && FOAM > 0.03 && beer > 0.05) foamExtra = Math.min(0.2, foamExtra + shake * dt * 0.25);
@@ -872,6 +1001,7 @@ function drawAddPour(level) {
 }
 
 function refill() {
+  ice = [];
   state = 'refilling';
   uprightFor = 0;
   startFizz();
@@ -1152,6 +1282,50 @@ function draw(level) {
 const CONDMAP = { beer: [1, 1, 0.5], butterbeer: [-1, 1, 0.5], rootbeer: [1, 1, 0], water: [-1, 1, 0.2] };
 const hexRgb = h => h.match(/\w\w/g).map(v => parseInt(v, 16) / 255);
 
+// Everything the 3D glass shader needs: gravity in the glass's frame, the
+// surface plane, wave rows, ripple rings, and each ice cube's place and turn.
+function state3d(level, inv, m, bub, hasFloat) {
+  const cA = Math.cos(angle), sA = Math.sin(angle), cP = Math.cos(pitch), sP = Math.sin(pitch);
+  const G = [sA * cP, cA * cP, sP];
+  const L = level * cP;
+  const ex = [cA, -sA, 0];
+  const ez = [ex[1] * G[2] - ex[2] * G[1], ex[2] * G[0] - ex[0] * G[2], ex[0] * G[1] - ex[1] * G[0]];
+  const Rw = [ex, G, ez];                       // columns: water's right, down, back
+  const mv = (M, v) => [0, 1, 2].map(i => M[0][i] * v[0] + M[1][i] * v[1] + M[2][i] * v[2]);
+  const mm = (A, B) => B.map(col => mv(A, col));
+  const Ry = t => [[Math.cos(t), 0, -Math.sin(t)], [0, 1, 0], [Math.sin(t), 0, Math.cos(t)]];
+  const Rx = t => [[1, 0, 0], [0, Math.cos(t), Math.sin(t)], [0, -Math.sin(t), Math.cos(t)]];
+  const Rz = t => [[Math.cos(t), Math.sin(t), 0], [-Math.sin(t), Math.cos(t), 0], [0, 0, 1]];
+  const Ri = glassRi(), size = iceSize();
+  const row = (H, v) => {
+    const f = Math.max(0, Math.min(1, v / (2 * Ri) + 0.5)) * (WN - 1), i = Math.floor(f), j = Math.min(WN - 1, i + 1);
+    return H[i] + (H[j] - H[i]) * (f - i);
+  };
+  const icePos = new Float32Array(15), iceRot = new Float32Array(45);
+  ice.forEach((c, i) => {
+    const y = (L + row(waveH, c.x) + row(waveHz, c.z) - c.x * G[0] - c.z * G[2]) / Math.max(0.3, G[1]);
+    const sink = size * 0.36 + c.fy;
+    icePos.set([c.x + G[0] * sink, y + G[1] * sink, c.z + G[2] * sink], i * 3);
+    const M = mm(Rw, mm(Ry(c.yaw), mm(Rx(c.a), Rz(c.b))));
+    iceRot.set([...M[0], ...M[1], ...M[2]], i * 9);
+  });
+  const ringData = new Float32Array(16);
+  rings.forEach((r, i) => ringData.set([r.x, r.z, r.t, r.amp], i * 4));
+  waveTexData.set(waveH, 0);
+  waveTexData.set(waveHz, WN);
+  const c3 = s => s.split(',').map(v => Number(v) / 255);
+  return {
+    dpr: Math.min(2, dpr), PW, PH, time: clock, g: G, level: L, fill: beer > 0.002 ? 1 : 0,
+    inv: [inv.a, inv.b, 0, inv.c, inv.d, 0, inv.e, inv.f, 1],
+    fwd: [m.a, m.b, 0, m.c, m.d, 0, m.e, m.f, 1],
+    rings: ringData, waves: waveTexData, hasFloat,
+    condAmt: TEX.condensation ? (drink.gl.condAmt ?? 0.85) * Math.min(1, drink.drops) : 0,
+    condMap: CONDMAP[drinkName] || [1, 1, 0.5], sigma: drink.gl.sigma,
+    iceN: ice.length, icePos, iceRot, iceSize: size,
+    bubbles: bub, bubbleTint: c3(drink.bubbleTint || '255, 240, 200'),
+  };
+}
+
 function drawGL(level) {
   const m = new DOMMatrix().translate(W / 2, H / 2).rotate(-screenAngle).translate(-PW / 2, -PH / 2);
   const inv = m.inverse();
@@ -1164,7 +1338,8 @@ function drawGL(level) {
   const c3 = s => s.split(',').map(v => Number(v) / 255);
   const hasFloat = !!(TEX.lemon || TEX.ice || TEX.scoop) && drawFloatLayer(level);
   if (hasFloat) GLR.updateLayer('float', floatLayer);
-  GLR.render({
+  if (g.mode3d) GLR.render3d(state3d(level, inv, m, bub, hasFloat));
+  else GLR.render({
     hasFloat, condAbove: 0.08, creamFrom: [creamOrigin, creamAge], creamMix, creamT, shear: Math.max(-3, Math.min(3, angleV)),
     scoop: TEX.scoop ? [PW * 0.08 + liquidShift * 0.5, level - foamH + PW * 0.05, PW * 0.18] : [0, 0, 0], creamAt: [PW * 0.08 + liquidShift * 0.5, 90],
     dpr: Math.min(2, dpr), PW, PH, time: clock, angle, level, fill: beer > 0.002 ? 1 : 0,
@@ -2148,7 +2323,11 @@ function onOrientation(e) {
   const y = Math.sin(b);
   gravityStrength = Math.hypot(x, y);
   // Lying flat, the direction is noise; keep the last one.
-  if (gravityStrength > 0.25) targetAngle = Math.atan2(x, y);
+  if (gravityStrength > 0.25) {
+    targetAngle = Math.atan2(x, y);
+    // How far the top of the phone leans away from (+) or toward (-) you.
+    targetPitch = Math.max(-0.6, Math.min(0.6, Math.atan2(Math.cos(g) * Math.cos(b), gravityStrength)));
+  }
 }
 
 function showSimulator() {
@@ -2459,6 +2638,7 @@ canvas.addEventListener('pointerdown', e => {
   const m = new DOMMatrix().translate(W / 2, H / 2).rotate(-screenAngle).translate(-PW / 2, -PH / 2).inverse();
   const pt = m.transformPoint(new DOMPoint(e.clientX - r.left, e.clientY - r.top));
   poke(toWorld(pt.x, pt.y).x, 280);
+  ring(toWorld(pt.x, pt.y).x, -glassRi() * 0.75, 5);
   stir = Math.min(1, stir + 0.35);
   if (drink.fizz > 0) {
     for (let i = 0; i < 18; i++) {
@@ -2493,6 +2673,9 @@ if (params.has('tilt') || params.has('sim')) {
 }
 if (params.has('beer')) beer = Math.max(0, Math.min(FULL, Number(params.get('beer'))));
 if (params.has('pour')) refill();
+// ?ice=3 starts with cubes already floating; ?pitch=20 leans the glass away.
+for (let i = 0; i < Math.min(MAX_ICE, Number(params.get('ice')) || 0); i++) addIce(true);
+if (params.has('pitch')) targetPitch = pitch = Number(params.get('pitch')) * RAD;
 
 let last = performance.now();
 function frame(now) {
