@@ -1,4 +1,5 @@
-// BEER: the whole screen is a glass of beer. Tip the phone and the beer
+// BEER: the whole screen is a glass of beer (or wine, butterbeer, root beer
+// or coffee). Tip the phone and the beer
 // stays level with the ground, sloshes, and drains out over the top edge
 // into your mouth.
 //
@@ -17,13 +18,61 @@ const simTilt = document.getElementById('sim-tilt');
 const startEl = document.getElementById('start');
 
 const RAD = Math.PI / 180;
-const FULL = 0.76;          // share of the screen filled with beer; foam sits on top
-const FOAM = 0.075;         // settled head height, as a share of screen height
+const FULL = 0.76;          // share of the screen filled; foam sits on top
 const DRINK_RATE = 0.24;    // share of the screen swallowed per second, max
 const REFILL_RATE = 0.32;   // share of the screen poured per second
 const UPRIGHT = 22 * RAD;   // within this of upright counts as upright
 
 const params = new URLSearchParams(location.search);
+
+// Each drink: liquid colours (surface to depth), the glow of light through
+// it, its head (height as a share of screen height, colours top to bottom,
+// foam cell tint), fizz, condensation, steam, and whether it earns a burp.
+const DRINKS = {
+  beer: {
+    title: 'BEER', unit: ['beer', 'beers'],
+    body: ['#fbc93f', '#f1a91e', '#d47d0d', '#8e4406'],
+    glow: 'rgba(255, 228, 140, 0.38)', haze: '255, 238, 190',
+    foam: 0.075, foamShade: ['#fffdf7', '#f7ead0', '#e5c47e'], cell: '250, 242, 222', cellEdge: '196, 160, 100',
+    fresh: 0.11, fizz: 1, drops: 1, steam: 0, burp: true,
+    bg: ['#4a3b2c', '#1e150e'], pour: ['#b8620a', '#f4b52a', '#ffe08a'],
+  },
+  butterbeer: {
+    title: 'BUTTERBEER', unit: ['butterbeer', 'butterbeers'],
+    body: ['#f0c372', '#dc9f45', '#b8722a', '#74400f'],
+    glow: 'rgba(255, 220, 150, 0.4)', haze: '255, 240, 205',
+    foam: 0.15, foamShade: ['#fffbf0', '#fbf0d6', '#efd6a2'], cell: '255, 246, 226', cellEdge: '214, 176, 116',
+    fresh: 0.09, fizz: 0.5, drops: 1, steam: 0, burp: true,
+    bg: ['#4c3a28', '#1f150c'], pour: ['#a8681e', '#e9b45c', '#fbe0a8'],
+  },
+  rootbeer: {
+    title: 'ROOT BEER', unit: ['root beer', 'root beers'],
+    body: ['#7a3214', '#521c09', '#331005', '#1a0702'],
+    glow: 'rgba(214, 96, 40, 0.34)', haze: '232, 196, 150',
+    foam: 0.09, foamShade: ['#f6ead6', '#e6cda4', '#b8864e'], cell: '240, 222, 192', cellEdge: '150, 100, 50',
+    fresh: 0.13, fizz: 0.9, drops: 1, steam: 0, burp: true,
+    bg: ['#3e3026', '#18110c'], pour: ['#2a0d03', '#7a3214', '#c0643a'],
+  },
+  wine: {
+    title: 'WINE', unit: ['glass of wine', 'glasses of wine'],
+    body: ['#9c1836', '#6e0d25', '#440616', '#200209'],
+    glow: 'rgba(235, 70, 100, 0.36)', haze: '255, 160, 180',
+    foam: 0, foamShade: ['#000', '#000', '#000'], cell: '0, 0, 0', cellEdge: '0, 0, 0',
+    fresh: 0, fizz: 0, drops: 0.25, steam: 0, burp: false,
+    bg: ['#3a3236', '#141012'], pour: ['#3a0410', '#8e1430', '#e0566e'],
+  },
+  coffee: {
+    title: 'COFFEE', unit: ['coffee', 'coffees'],
+    body: ['#6b3d1c', '#46250f', '#2a1407', '#140902'],
+    glow: 'rgba(200, 120, 60, 0.22)', haze: '214, 160, 104',
+    foam: 0.022, foamShade: ['#d7a36a', '#b97d45', '#8c5628'], cell: '226, 176, 118', cellEdge: '120, 70, 30',
+    fresh: 0.012, fizz: 0, drops: 0, steam: 1, burp: false,
+    bg: ['#3a3029', '#15100c'], pour: ['#1c0c03', '#5a3216', '#9a6a3e'],
+  },
+};
+const drinkName = DRINKS[params.get('drink')] ? params.get('drink') : (loadDrink() || 'beer');
+const drink = DRINKS[drinkName] || DRINKS.beer;
+const FOAM = drink.foam;    // settled head height, as a share of screen height
 
 let dpr = 1, W = 0, H = 0, PW = 0, PH = 0, screenAngle = 0, D = 0;
 let targetAngle = 0;        // gravity direction on screen, 0 = straight down
@@ -45,6 +94,7 @@ let laceTimer = 0;
 let audio = null, fizz = null, lastGlug = 0;
 let sprites = null;
 let sites = [];
+let steam = [];
 
 // ---------- layout and textures ----------
 
@@ -122,8 +172,8 @@ function buildFoamPattern() {
         if (x < -c.r || x > S + c.r || y < -c.r || y > S + c.r) continue;
         const g = t.createRadialGradient(x - c.r * 0.3, y - c.r * 0.35, 0, x, y, c.r);
         g.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-        g.addColorStop(0.7, 'rgba(250, 242, 222, 0.55)');
-        g.addColorStop(1, 'rgba(196, 160, 100, 0.55)');
+        g.addColorStop(0.7, `rgba(${drink.cell}, 0.55)`);
+        g.addColorStop(1, `rgba(${drink.cellEdge}, 0.55)`);
         t.fillStyle = g;
         t.beginPath(); t.arc(x, y, c.r, 0, Math.PI * 2); t.fill();
       }
@@ -140,14 +190,14 @@ function buildFoamPattern() {
 function buildGlass() {
   const [glass, g] = makeCanvas(PW, PH);
 
-  for (let i = 0; i < 1800; i++) {
+  for (let i = 0; i < 1800 * drink.drops; i++) {
     g.fillStyle = `rgba(255, 255, 255, ${0.04 + Math.random() * 0.08})`;
     g.beginPath();
     g.arc(Math.random() * PW, Math.random() * PH, 0.4 + Math.random() * 1.1, 0, Math.PI * 2);
     g.fill();
   }
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 10 * drink.drops; i++) {
     // A drop that has run down, leaving a clear trail.
     const x = Math.random() * PW;
     const y0 = Math.random() * PH * 0.6;
@@ -164,7 +214,7 @@ function buildGlass() {
     g.stroke();
     drawDrop(g, x, y0 + len, 4 + Math.random() * 3);
   }
-  const drops = Math.round(PW * PH / 5200);
+  const drops = Math.round(PW * PH / 5200 * drink.drops);
   for (let i = 0; i < drops; i++) {
     drawDrop(g, Math.random() * PW, Math.random() * PH, 1.5 + Math.pow(Math.random(), 2.5) * 8);
   }
@@ -276,7 +326,7 @@ function wave(x) {
 
 function foamTop(x) {
   const h = foamHeight();
-  const lumpy = Math.min(1, h / (PH * FOAM));
+  const lumpy = FOAM ? Math.min(1, h / (PH * FOAM)) : 0;
   return wave(x) - h
     + lumpy * (5 * Math.sin(x * 0.041 + clock * 0.5)
       + 3 * Math.sin(x * 0.113 - clock * 0.7)
@@ -303,7 +353,7 @@ function update(dt) {
   let drink = 0;
   if (state === 'refilling') {
     beer = Math.min(FULL, beer + REFILL_RATE * dt);
-    foamExtra = Math.min(0.11, foamExtra + 0.22 * dt);
+    foamExtra = Math.min(drink.fresh, foamExtra + 0.22 * dt);
     if (beer >= FULL) {
       state = 'full';
       stopFizz();
@@ -325,7 +375,7 @@ function update(dt) {
       state = 'empty';
       beersDrunk += 1;
       saveCount();
-      burp();
+      if (drink.burp) burp(); else if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
     }
   }
   if (state !== 'refilling') foamExtra = Math.max(0, foamExtra - 0.012 * dt);
@@ -339,6 +389,7 @@ function update(dt) {
 
   const level = beer > 0 ? surfaceFor(poly, beer * total) : Math.max(...poly.map(p => p.y)) + 50;
   updateBubbles(dt, level);
+  updateSteam(dt, level);
   updateLace(dt, level, drink > 0);
   return level;
 }
@@ -354,9 +405,9 @@ function inLiquid(x, y, level, margin) {
 }
 
 function updateBubbles(dt, level) {
-  if (beer > 0.01) {
+  if (beer > 0.01 && drink.fizz > 0) {
     // Free-floating bubbles start deep and rise.
-    const spawn = (state === 'refilling' ? 90 : 26) * dt;
+    const spawn = (state === 'refilling' ? 90 : 26) * drink.fizz * dt;
     for (let n = spawn + Math.random(); n >= 1 && bubbles.length < 260; n--) {
       let x, y;
       if (state === 'refilling') {
@@ -372,7 +423,7 @@ function updateBubbles(dt, level) {
     for (const s of sites) {
       s.wait -= dt;
       if (s.wait <= 0) {
-        s.wait = 0.07 + Math.random() * 0.06;
+        s.wait = (0.07 + Math.random() * 0.06) / drink.fizz;
         if (bubbles.length < 320 && inLiquid(s.x, s.y, level, 12)) {
           bubbles.push(newBubble(s.x, s.y, 0.6 + Math.random() * 0.5, true));
         }
@@ -392,6 +443,24 @@ function updateBubbles(dt, level) {
   });
 }
 
+// Coffee: wisps of steam drift up off the surface.
+function updateSteam(dt, level) {
+  if (drink.steam && beer > 0.02 && steam.length < 60 && Math.random() < dt * 14) {
+    const p = toScreen((Math.random() - 0.5) * PW, level - foamHeight() - 10);
+    if (p.x > -20 && p.x < PW + 20 && p.y > 0) {
+      steam.push({ x: p.x, y: p.y, r: 30 + Math.random() * 40, life: 1, drift: (Math.random() - 0.5) * 20 });
+    }
+  }
+  const ux = -Math.sin(angle), uy = -Math.cos(angle);
+  steam = steam.filter(s => {
+    s.life -= dt / 3.5;
+    s.r += dt * 18;
+    s.x += (ux * 32 + s.drift + Math.sin(clock * 1.3 + s.r * 0.05) * 14) * dt;
+    s.y += uy * 32 * dt;
+    return s.life > 0;
+  });
+}
+
 function newBubble(x, y, r, chain = false) {
   return { x, y, r, v: chain ? 55 : 35 + Math.random() * 60, age: 0, phase: Math.random() * 6, chain };
 }
@@ -399,7 +468,7 @@ function newBubble(x, y, r, chain = false) {
 // Foam clings to the glass as the level drops.
 function updateLace(dt, level, draining) {
   laceTimer -= dt;
-  if (draining && laceTimer <= 0 && beer > 0.02) {
+  if (draining && laceTimer <= 0 && beer > 0.02 && FOAM > 0.05) {
     laceTimer = 0.09;
     for (let i = 0; i < 6; i++) {
       const wx = (Math.random() - 0.5) * D;
@@ -452,14 +521,15 @@ function draw(level) {
   }
 
   ctx.setTransform(base);
+  drawSteam();
   ctx.drawImage(sprites.glass, 0, 0, PW, PH);
   drawHud();
 }
 
 function drawEmptyGlass() {
   const bg = ctx.createLinearGradient(0, 0, 0, PH);
-  bg.addColorStop(0, '#4a3b2c');
-  bg.addColorStop(1, '#1e150e');
+  bg.addColorStop(0, drink.bg[0]);
+  bg.addColorStop(1, drink.bg[1]);
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, PW, PH);
   for (const l of lace) {
@@ -471,10 +541,10 @@ function drawEmptyGlass() {
 
 function drawBeer(level) {
   const body = ctx.createLinearGradient(0, level, 0, level + PH);
-  body.addColorStop(0, '#fbc93f');
-  body.addColorStop(0.12, '#f1a91e');
-  body.addColorStop(0.55, '#d47d0d');
-  body.addColorStop(1, '#8e4406');
+  body.addColorStop(0, drink.body[0]);
+  body.addColorStop(0.12, drink.body[1]);
+  body.addColorStop(0.55, drink.body[2]);
+  body.addColorStop(1, drink.body[3]);
   ctx.fillStyle = body;
   ctx.beginPath();
   ctx.moveTo(-D, level + wave(-D));
@@ -489,20 +559,21 @@ function drawBeer(level) {
   ctx.clip();
   const lit = toWorld(PW * 0.4, PH * 0.35);
   const glow = ctx.createRadialGradient(lit.x, lit.y, 0, lit.x, lit.y, D * 0.5);
-  glow.addColorStop(0, 'rgba(255, 228, 140, 0.38)');
-  glow.addColorStop(1, 'rgba(255, 228, 140, 0)');
+  glow.addColorStop(0, drink.glow);
+  glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
   ctx.fillStyle = glow;
   ctx.fillRect(-D, level - 20, D * 2, D * 2);
   // Creamy haze where the head meets the beer.
   const haze = ctx.createLinearGradient(0, level, 0, level + 26);
-  haze.addColorStop(0, 'rgba(255, 238, 190, 0.7)');
-  haze.addColorStop(1, 'rgba(255, 238, 190, 0)');
+  haze.addColorStop(0, `rgba(${drink.haze}, ${FOAM ? 0.7 : 0.35})`);
+  haze.addColorStop(1, `rgba(${drink.haze}, 0)`);
   ctx.fillStyle = haze;
   ctx.fillRect(-D, level - 20, D * 2, 50);
   ctx.restore();
 }
 
 function drawFoam(level) {
+  if (!FOAM) return drawMeniscus(level);
   if (foamHeight() < 1) return;
   const step = 4;
   ctx.beginPath();
@@ -513,15 +584,15 @@ function drawFoam(level) {
 
   const h = foamHeight();
   const shade = ctx.createLinearGradient(0, level - h - 10, 0, level + 4);
-  shade.addColorStop(0, '#fffdf7');
-  shade.addColorStop(0.55, '#f7ead0');
-  shade.addColorStop(1, '#e5c47e');
+  shade.addColorStop(0, drink.foamShade[0]);
+  shade.addColorStop(0.55, drink.foamShade[1]);
+  shade.addColorStop(1, drink.foamShade[2]);
   ctx.fillStyle = shade;
   ctx.fill();
 
   ctx.save();
   ctx.clip();
-  ctx.globalAlpha = 0.9;
+  ctx.globalAlpha = FOAM < 0.05 ? 0.45 : 0.9;
   ctx.fillStyle = sprites.foam;
   ctx.fillRect(-D, level - h - 30, D * 2, h + 40);
   ctx.globalAlpha = 1;
@@ -535,7 +606,7 @@ function drawFoam(level) {
   ctx.restore();
 
   // Soft froth line under the head.
-  for (let x = -D; x <= D; x += 13) {
+  if (FOAM >= 0.05) for (let x = -D; x <= D; x += 13) {
     const r = 5 + 4 * Math.sin(x * 1.7);
     ctx.globalAlpha = 0.55;
     ctx.drawImage(sprites.blob, x - r, level + wave(x) + 1 - r * 0.6, r * 2, r * 1.4);
@@ -550,17 +621,37 @@ function drawFoam(level) {
   ctx.stroke();
 }
 
+// No head: a bright meniscus line along the surface.
+function drawMeniscus(level) {
+  ctx.beginPath();
+  for (let x = -D; x <= D; x += 4) ctx.lineTo(x, level + wave(x));
+  ctx.strokeStyle = 'rgba(255, 210, 220, 0.55)';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+function drawSteam() {
+  for (const s of steam) {
+    ctx.globalAlpha = Math.sin(s.life * Math.PI) * 0.07;
+    ctx.drawImage(sprites.blob, s.x - s.r, s.y - s.r, s.r * 2, s.r * 2);
+  }
+  ctx.globalAlpha = 1;
+}
+
 // A stream pouring in from the top edge during a refill.
 function drawPour(level) {
   const surface = toScreen(0, level).y - foamHeight();
   const x = PW / 2 + Math.sin(clock * 7) * 2;
   const w = Math.max(14, PW * 0.06);
   const grad = ctx.createLinearGradient(x - w / 2, 0, x + w / 2, 0);
-  grad.addColorStop(0, '#b8620a');
-  grad.addColorStop(0.3, '#f4b52a');
-  grad.addColorStop(0.45, '#ffe08a');
-  grad.addColorStop(0.6, '#f2ab20');
-  grad.addColorStop(1, '#a85608');
+  grad.addColorStop(0, drink.pour[0]);
+  grad.addColorStop(0.3, drink.pour[1]);
+  grad.addColorStop(0.45, drink.pour[2]);
+  grad.addColorStop(0.6, drink.pour[1]);
+  grad.addColorStop(1, drink.pour[0]);
   ctx.fillStyle = grad;
   ctx.beginPath();
   ctx.moveTo(x - w * 0.6, -5);
@@ -583,7 +674,7 @@ function drawHud() {
   else if (state === 'full' && !drankOnce) text = 'Tip it to your lips';
   if (messageEl.textContent !== text) messageEl.textContent = text;
   messageEl.hidden = !text;
-  const count = beersDrunk === 1 ? '1 beer' : `${beersDrunk} beers`;
+  const count = `${beersDrunk} ${drink.unit[beersDrunk === 1 ? 0 : 1]}`;
   if (countEl.textContent !== count) countEl.textContent = count;
 }
 
@@ -718,17 +809,41 @@ async function start() {
   setTimeout(() => { if (!gotSensor) showSimulator(); }, 1000);
 }
 
+function countKey() {
+  return drinkName === 'beer' ? 'beer.count' : `beer.count.${drinkName}`;
+}
+
 function loadCount() {
-  try { return Number(localStorage.getItem('beer.count')) || 0; } catch { return 0; }
+  try { return Number(localStorage.getItem(countKey())) || 0; } catch { return 0; }
 }
 
 function saveCount() {
-  try { localStorage.setItem('beer.count', String(beersDrunk)); } catch { /* ignore */ }
+  try { localStorage.setItem(countKey(), String(beersDrunk)); } catch { /* ignore */ }
+}
+
+function loadDrink() {
+  try { return localStorage.getItem('beer.drink'); } catch { return null; }
+}
+
+// The start screen's drink picker reloads with ?drink=.
+function setupPicker() {
+  document.getElementById('title').textContent = drink.title;
+  document.title = drink.title;
+  for (const btn of document.querySelectorAll('[data-drink]')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.drink === drinkName));
+    btn.addEventListener('click', () => {
+      try { localStorage.setItem('beer.drink', btn.dataset.drink); } catch { /* ignore */ }
+      const q = new URLSearchParams(location.search);
+      q.set('drink', btn.dataset.drink);
+      location.search = q.toString();
+    });
+  }
 }
 
 // ---------- boot ----------
 
 document.getElementById('start-btn').addEventListener('click', start);
+setupPicker();
 canvas.addEventListener('click', () => { if (state === 'empty') refill(); });
 window.addEventListener('resize', layout);
 if (screen.orientation) screen.orientation.addEventListener('change', layout);
