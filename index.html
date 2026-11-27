@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#1b120a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>BEER</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
   <canvas id="gl"></canvas>
@@ -25,7 +25,7 @@
     <div id="count"></div>
   </div>
 
-  <div id="message" hidden></div>
+  <button id="pour-btn" type="button" hidden>Pour</button>
   <div id="actions" role="group" aria-label="Add to your drink" hidden></div>
 
   <label id="sim" hidden>
@@ -48,7 +48,7 @@
     </div>
   </form>
 
-  <script src="gl.js"></script>
-  <script src="app.js"></script>
+  <script defer src="gl.js?v=3"></script>
+  <script defer src="app.js?v=3"></script>
 </body>
 </html>

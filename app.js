@@ -12,7 +12,7 @@
 const canvas = document.getElementById('scene');
 const glCanvas = document.getElementById('gl');
 let ctx = canvas.getContext('2d'); // swapped briefly to draw the head offscreen
-const messageEl = document.getElementById('message');
+const pourBtn = document.getElementById('pour-btn');
 const countEl = document.getElementById('count');
 const simEl = document.getElementById('sim');
 const simTilt = document.getElementById('sim-tilt');
@@ -22,7 +22,6 @@ const RAD = Math.PI / 180;
 const FULL = 0.76;          // share of the screen filled; foam sits on top
 const DRINK_RATE = 0.24;    // share of the screen swallowed per second, max
 const REFILL_RATE = 0.32;   // share of the screen poured per second
-const UPRIGHT = 22 * RAD;   // within this of upright counts as upright
 
 const params = new URLSearchParams(location.search);
 
@@ -160,12 +159,10 @@ let targetAngle = 0;        // gravity direction on screen, 0 = straight down
 let gravityStrength = 1;    // how much of gravity lies in the screen plane
 let angle = 0, angleV = 0;  // the liquid's lagging surface angle (slosh)
 let slosh = 0;
-let beer = FULL;
+let beer = 0;
 let foamExtra = 0;          // extra head from a fresh pour
 let flow = 0;               // smoothed drink rate
-let state = 'full';         // full | drinking | empty | refilling
-let uprightFor = 0;
-let drankOnce = false;
+let state = 'empty';        // full | drinking | empty | refilling
 let beersDrunk = loadCount();
 let gotSensor = false;
 let clock = 0;
@@ -211,6 +208,7 @@ let edgeBeads = [];
 // ---------- layout and textures ----------
 
 let useGL = false;
+let wineBowl;
 
 function layout() {
   dpr = Math.min(3, window.devicePixelRatio || 1);
@@ -223,6 +221,7 @@ function layout() {
   PW = turned ? H : W;
   PH = turned ? W : H;
   D = Math.hypot(PW, PH);
+  wineBowl = buildWineBowl();
   sprites = buildSprites();
   if (useGL) {
     const gdpr = Math.min(2, dpr);
@@ -250,7 +249,7 @@ function makeCanvas(w, h) {
   return [c, g];
 }
 
-function buildSprites() {
+function buildSprites(room = buildRoom()) {
   // A carbonation bubble as a macro photo shows it: a dark refracting ring,
   // a lit rim, a bright pin of reflection, and a soft caustic crescent below.
   const [bubble, b] = makeCanvas(32, 32);
@@ -299,8 +298,9 @@ function buildSprites() {
     : [];
 
   return {
-    bubble, blob, foam: drink.head === 'none' ? null : buildHeadPattern(),
-    glass: buildGlass(), room: buildRoom(), grain: drink.grainAmount ? buildGrain() : null,
+    bubble, blob, foam: !useGL && drink.head !== 'none' ? buildHeadPattern() : null,
+    glass: drinkName === 'wine' ? buildWineGlass() : useGL ? null : buildGlass(),
+    room, grain: !useGL && drink.grainAmount ? buildGrain() : null,
   };
 }
 
@@ -539,6 +539,95 @@ function drawBead(g, x, y, r) {
 
 // ---------- geometry ----------
 
+function buildWineBowl() {
+  const cx = PW / 2, cy = PH * 0.345;
+  const rx = Math.min(PW * 0.35, PH * 0.32), ry = PH * 0.285;
+  const first = -Math.PI * 0.24, last = Math.PI - first;
+  const rim = cy + ry * Math.sin(first);
+  const lip = rx * Math.cos(first);
+  const path = new Path2D();
+  path.ellipse(cx, cy, rx, ry, 0, first, last);
+  path.closePath();
+  // Start with the two rim points so the spill test can use the lower one.
+  const points = [[cx - lip, rim], [cx + lip, rim]];
+  for (let i = 1; i < 20; i++) {
+    const a = first + (last - first) * i / 20;
+    points.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]);
+  }
+  return { cx, cy, rx, ry, rim, lip, path, points,
+    area: polygonArea(points.map(([x, y]) => ({ x, y }))) };
+}
+
+function buildWineGlass() {
+  const [glass, g] = makeCanvas(PW, PH);
+  const { cx, cy, rx, ry, rim, lip, path } = wineBowl;
+  const joint = cy + ry - 3, foot = PH * 0.855;
+  const stem = Math.max(3, rx * 0.035);
+  const sheen = g.createLinearGradient(cx - stem, 0, cx + stem, 0);
+  sheen.addColorStop(0, 'rgba(240, 244, 255, .68)');
+  sheen.addColorStop(0.35, 'rgba(255, 255, 255, .2)');
+  sheen.addColorStop(0.75, 'rgba(19, 15, 20, .48)');
+  sheen.addColorStop(1, 'rgba(230, 243, 255, .5)');
+  g.fillStyle = sheen;
+  g.beginPath();
+  g.moveTo(cx - stem * 1.7, joint);
+  g.bezierCurveTo(cx - stem, joint + 15, cx - stem, foot - 18, cx - stem * 2, foot);
+  g.lineTo(cx + stem * 2, foot);
+  g.bezierCurveTo(cx + stem, foot - 18, cx + stem, joint + 15, cx + stem * 1.7, joint);
+  g.closePath();
+  g.fill();
+
+  const base = g.createLinearGradient(0, foot - 10, 0, foot + 10);
+  base.addColorStop(0, 'rgba(244, 249, 255, .36)');
+  base.addColorStop(0.65, 'rgba(210, 220, 236, .08)');
+  base.addColorStop(1, 'rgba(219, 235, 255, .62)');
+  g.beginPath();
+  g.ellipse(cx, foot, rx * 0.60, Math.max(4, rx * 0.075), 0, 0, Math.PI * 2);
+  g.fillStyle = base;
+  g.fill();
+  g.strokeStyle = 'rgba(241, 247, 255, .6)';
+  g.lineWidth = 1.3;
+  g.stroke();
+
+  const reflection = g.createLinearGradient(cx - rx, 0, cx + rx, 0);
+  reflection.addColorStop(0, 'rgba(244, 249, 255, .68)');
+  reflection.addColorStop(0.25, 'rgba(219, 235, 255, .08)');
+  reflection.addColorStop(0.55, 'rgba(255, 255, 255, .03)');
+  reflection.addColorStop(0.86, 'rgba(235, 244, 255, .32)');
+  reflection.addColorStop(1, 'rgba(243, 248, 255, .74)');
+  g.strokeStyle = reflection;
+  g.lineWidth = 2.2;
+  g.stroke(path);
+
+  g.save();
+  g.clip(path);
+  g.fillStyle = 'rgba(235, 243, 255, .035)';
+  g.fill(path);
+  g.strokeStyle = 'rgba(234, 244, 255, .24)';
+  g.lineWidth = Math.max(2, rx * 0.025);
+  g.beginPath();
+  g.ellipse(cx, cy, rx * 0.90, ry * 0.95, 0, Math.PI * 0.68, Math.PI * 1.06);
+  g.stroke();
+  g.restore();
+
+  g.beginPath();
+  g.ellipse(cx, rim, lip, Math.max(3, lip * 0.09), 0, 0, Math.PI * 2);
+  g.strokeStyle = 'rgba(234, 243, 255, .58)';
+  g.lineWidth = 1.5;
+  g.stroke();
+  return glass;
+}
+
+function fillLimit() {
+  // A 5 fl oz serving in a 15 fl oz wine glass.
+  return drinkName === 'wine' ? 5 / 15 : FULL;
+}
+
+function pourAgitation() {
+  const tilt = Math.acos(Math.max(-1, Math.min(1, Math.cos(targetAngle) * gravityStrength)));
+  return 0.15 + 0.85 * Math.max(0, 1 - tilt / (55 * RAD)) ** 1.5;
+}
+
 function wrap(a) {
   while (a > Math.PI) a -= Math.PI * 2;
   while (a < -Math.PI) a += Math.PI * 2;
@@ -654,7 +743,7 @@ function saveIce() {
   try { localStorage.setItem('beer.ice', String(ice.length)); } catch { /* ignore */ }
 }
 
-// Drop one more cube in from above the glass. False if it already holds five.
+// Drop one more cube in from above the glass, unless it is already at capacity.
 function addIce() {
   if (ice.length >= MAX_ICE) return false;
   const s = iceSize(), lim = glassRi() - s * 0.5;
@@ -666,7 +755,6 @@ function addIce() {
     yaw: Math.random() * 6.28, a: Math.random() - 0.5, b: Math.random() - 0.5,
     yawV: (Math.random() - 0.5) * 2, av: 3 * (Math.random() - 0.5), bv: 3 * (Math.random() - 0.5),
   });
-  saveIce();
   return true;
 }
 function removeIce() {
@@ -675,7 +763,6 @@ function removeIce() {
   let top = 0;
   ice.forEach((c, i) => { if (c.y < ice[top].y) top = i; });
   ice.splice(top, 1);
-  saveIce();
   return true;
 }
 
@@ -873,18 +960,22 @@ function update(dt) {
   if (creamAmt > 0.02 && !drink.float) creamMix = Math.min(1, creamMix + dt * (0.008 + agitation * 0.2));
   updateExtras(dt);
 
-  const poly = [[0, 0], [PW, 0], [PW, PH], [0, PH]].map(([x, y]) => toWorld(x, y));
-  const total = PW * PH;
-  // The top edge of the phone is the rim; beer above its lower corner spills.
+  const bowl = drinkName === 'wine' ? wineBowl : null;
+  const poly = (bowl ? bowl.points : [[0, 0], [PW, 0], [PW, PH], [0, PH]]).map(([x, y]) => toWorld(x, y));
+  const total = bowl ? bowl.area : PW * PH;
+  // Liquid above the lower end of the rim spills.
   const rim = Math.max(poly[0].y, poly[1].y);
   const fits = polygonArea(clipBelow(poly, rim)) / total;
 
   let sip = 0;
   if (fizz && fizz.drips && audio && Math.random() < dt * 9) blip(800 + Math.random() * 900, 1400 + Math.random() * 900, 0.05, 0.04);
   if (state === 'refilling') {
-    beer = Math.min(FULL, beer + REFILL_RATE * dt);
-    foamExtra = Math.min(drink.fresh, foamExtra + 0.22 * dt);
-    if (beer >= FULL) {
+    const limit = fillLimit();
+    const poured = Math.min(limit - beer, REFILL_RATE * dt);
+    beer += poured;
+    const agitation = drinkName === 'beer' ? pourAgitation() : 1;
+    foamExtra = Math.min(drink.fresh, foamExtra + poured * drink.fresh / limit * agitation);
+    if (beer >= limit) {
       state = 'full';
       stopFizz();
       for (const id of pendingExtras) addExtra(id);
@@ -895,7 +986,6 @@ function update(dt) {
     beer -= sip;
     if (sip > 0) {
       state = 'drinking';
-      drankOnce = true;
       foamExtra = Math.max(0, foamExtra - 0.2 * dt);
       glug();
     } else {
@@ -912,12 +1002,6 @@ function update(dt) {
   }
   if (state !== 'refilling') foamExtra = Math.max(0, foamExtra - 0.012 * dt);
   flow += (sip / dt - flow) * Math.min(1, dt * 10);
-
-  if (state === 'empty') {
-    const upright = Math.abs(targetAngle) < UPRIGHT && gravityStrength > 0.5;
-    uprightFor = upright ? uprightFor + dt : 0;
-    if (uprightFor > 0.8) refill();
-  }
 
   const level = beer > 0 ? surfaceFor(poly, Math.min(0.995, beer + iceDisp) * total) : Math.max(...poly.map(p => p.y)) + 50;
   const wet = clipBelow(poly, level).filter(p => Math.abs(p.y - level) < 0.5).map(p => p.x);
@@ -1050,7 +1134,6 @@ function drawAddPour(level) {
 
 function refill() {
   state = 'refilling';
-  uprightFor = 0;
   startFizz();
   // Extras go in after the pour.
   pendingExtras = activeMods.filter(id => ['ice', 'lemon', 'float', 'creamer', 'coldfoam'].includes(id));
@@ -1185,6 +1268,8 @@ function updateLegs(dt, level) {
 }
 
 function drawLegs() {
+  ctx.save();
+  ctx.clip(wineBowl.path);
   for (const l of legs) {
     const a = Math.min(1, l.life * 2);
     const end = l.y0 + l.len;
@@ -1206,6 +1291,7 @@ function drawLegs() {
     ctx.fillStyle = `rgba(255, 240, 244, ${0.55 * a})`;
     ctx.beginPath(); ctx.arc(l.x - l.w * 0.3, end + 0.6, 0.7, 0, Math.PI * 2); ctx.fill();
   }
+  ctx.restore();
 }
 
 function drawPops(level) {
@@ -1274,7 +1360,8 @@ function draw(level) {
   baseMatrix = base;
 
   drawEmptyGlass();
-  if (state === 'refilling') drawPour(level);
+  ctx.save();
+  if (drinkName === 'wine') ctx.clip(wineBowl.path);
 
   if (beer > 0) {
     ctx.save();
@@ -1304,7 +1391,9 @@ function draw(level) {
     ctx.restore();
   }
 
+  ctx.restore();
   ctx.setTransform(base);
+  if (state === 'refilling') drawPour(level);
   if (TEX.condensation) {
     ctx.globalCompositeOperation = 'screen';
     ctx.globalAlpha = 0.8;
@@ -1385,6 +1474,7 @@ function drawGL(level) {
   if (hasFloat) GLR.updateLayer('float', floatLayer);
   if (g.mode3d) GLR.render3d(state3d(level, inv, m, bub, hasFloat));
   else GLR.render({
+    wineBowl: drinkName === 'wine' ? wineBowl : null,
     hasFloat, condAbove: 0.08, creamFrom: [creamOrigin, creamAge], creamMix, creamT, shear: Math.max(-3, Math.min(3, angleV)),
     scoop: TEX.scoop ? [PW * 0.08 + liquidShift * 0.5, level - foamH + PW * 0.05, PW * 0.18] : [0, 0, 0], creamAt: [PW * 0.08 + liquidShift * 0.5, 90],
     dpr: Math.min(2, dpr), PW, PH, time: clock, angle, level, fill: beer > 0.002 ? 1 : 0,
@@ -1435,6 +1525,7 @@ function drawGL(level) {
     ctx.restore();
   }
   drawSlides();
+  if (drinkName === 'wine') ctx.drawImage(sprites.glass, 0, 0, PW, PH);
   drawHud();
 }
 
@@ -1722,15 +1813,16 @@ function splitIce(src) {
 let floatLayer = null;
 function drawFloatLayer(level) {
   const k = Math.min(2, dpr);
-  if (!floatLayer || floatLayer.width !== Math.round(PW * k)) {
-    floatLayer = document.createElement('canvas');
-    floatLayer.width = Math.round(PW * k);
-    floatLayer.height = Math.round(PH * k);
+  if (beer < 0.05) return false;
+  const w = Math.round(PW * k), h = Math.round(PH * k);
+  floatLayer ||= document.createElement('canvas');
+  if (floatLayer.width !== w || floatLayer.height !== h) {
+    floatLayer.width = w;
+    floatLayer.height = h;
   }
   const g = floatLayer.getContext('2d');
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.clearRect(0, 0, floatLayer.width, floatLayer.height);
-  if (beer < 0.05) return false;
   g.setTransform(k, 0, 0, k, 0, 0);
   g.translate(PW / 2, PH / 2);
   g.rotate(-angle);
@@ -1746,7 +1838,7 @@ function drawFloatLayer(level) {
     g.drawImage(img, -w / 2, -h / 2, w, h);
     g.restore();
   };
-  iceCubes.forEach((c, i) => {
+  if (TEX.ice) iceCubes.forEach((c, i) => {
     const x = PW * (0.02 + 0.2 * i) + liquidShift * (0.7 + i * 0.15) + Math.sin(clock * (0.17 + i * 0.05) + i * 2) * 10;
     place(c, x, 0.36 + 0.04 * i, PW * (0.24 + 0.03 * (i % 2)), i * 1.7, 0.06 + 0.03 * i, `ice${i}`);
   });
@@ -2116,8 +2208,24 @@ function drawSteam(level) {
 // A stream pouring in from the top edge during a refill: tapering, with a
 // specular thread, a dimple and droplets where it lands.
 function drawPour(level) {
-  const surface = Math.max(0, toScreen(0, level).y - foamHeight());
-  const x = PW / 2 + Math.sin(clock * 7) * 1.5;
+  ctx.save();
+  const agitation = drinkName === 'beer' ? pourAgitation() : 1;
+  let surface = Math.max(0, toScreen(0, level).y - foamHeight());
+  if (drinkName === 'wine') surface = Math.min(surface, wineBowl.cy + wineBowl.ry - 3);
+  let x = PW / 2 + Math.sin(clock * 7) * 1.5;
+  if (drinkName === 'beer') {
+    // Move the stream toward the low wall as the glass tilts.
+    const slope = Math.sin(angle);
+    const rimX = x + slope * PW * 0.34;
+    const entry = toWorld(rimX, 0);
+    const wall = slope >= 0 ? PW - 6 : 6;
+    const wallDrop = Math.abs(slope) > 0.01 ? (wall - rimX) / slope : Infinity;
+    surface = Math.max(0, Math.min(wallDrop, surfaceAt(level, entry.x) - foamHeight() - entry.y));
+    ctx.translate(PW / 2, PH / 2);
+    ctx.rotate(-angle);
+    ctx.translate(entry.x, entry.y);
+    x = 0;
+  }
   const edge = (y, sign) => x + sign * (6.5 - 3 * Math.min(1, y / Math.max(1, surface)) + Math.sin(y * 0.04 - clock * 25) * 0.6);
   const grad = ctx.createLinearGradient(x - 7, 0, x + 7, 0);
   grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
@@ -2145,7 +2253,7 @@ function drawPour(level) {
     const ph = (clock * 2.2 + i * 0.137) % 1;
     const dir = (i % 2 ? 1 : -1) * (6 + (i * 5) % 14);
     ctx.fillStyle = drink.pour[2];
-    ctx.globalAlpha = 0.7 * (1 - ph);
+    ctx.globalAlpha = 0.7 * agitation * (1 - ph);
     ctx.beginPath();
     ctx.arc(x + dir * ph, surface - 16 * ph * (1 - ph) * 4 + 2, 0.8 + (i % 3) * 0.5, 0, Math.PI * 2);
     ctx.fill();
@@ -2162,21 +2270,19 @@ function drawPour(level) {
     for (let i = 0; i < 12; i++) {
       const a = clock * 5 + i * 1.9;
       const r = 4 + 4 * Math.abs(Math.sin(a));
-      ctx.globalAlpha = 0.5;
+      ctx.globalAlpha = 0.5 * agitation;
       ctx.drawImage(sprites.blob, x + Math.sin(a * 1.3) * 20 - r, surface - Math.abs(Math.cos(a)) * 7 - r * 0.5, r * 2, r);
     }
     ctx.globalAlpha = 1;
   }
+  ctx.restore();
 }
 
 function drawHud() {
-  let text = '';
-  if (!startEl.hidden) text = '';
-  else if (state === 'empty') text = 'Cheers! Hold it upright for another';
-  if (messageEl.textContent !== text) messageEl.textContent = text;
+  const showPour = startEl.hidden && state === 'empty';
+  if (pourBtn.hidden === showPour) pourBtn.hidden = !showPour;
   const showActions = startEl.hidden && actionsEl.childElementCount > 0;
   if (actionsEl.hidden === showActions) actionsEl.hidden = !showActions;
-  messageEl.hidden = !text;
   const count = `${beersDrunk} drunk`;
   if (countEl.textContent !== count) {
     countEl.textContent = count;
@@ -2413,24 +2519,43 @@ async function start() {
 }
 
 // Photo textures for this drink. Until they load, the drawn gradients show.
+const textureRequests = new Map();
+const webpTextures = new Set(['beer-body', 'beer-head', 'condensation']);
+
 function loadTextures() {
   const want = { body: drink.bodyTex || `${drinkName}-body` };
   if (drink.photoAlpha === 0) delete want.body;
   if (drink.head !== 'none') want.head = drink.headTex || `${drinkName}-head`;
   if (drink.drops) want.condensation = 'condensation';
-  if (drinkName === 'coffee' && drink.drops) want.condensation = 'condensation';
   if (drink.creamClouds) want.clouds = 'cream-clouds';
   if (drink.ice) want.ice = 'ice';
   if (drink.lemon) want.lemon = 'lemon';
   if (drink.float) want.scoop = 'scoop';
-  if (!TEX.roomPhoto) want.roomPhoto = 'room';
+  want.roomPhoto = 'room';
+  for (const [key, request] of textureRequests) {
+    if (want[key] === request.file && (key !== 'clouds' || request.tint === drink.creamClouds)) continue;
+    textureRequests.delete(key);
+    delete TEX[key];
+    if (key === 'head') headPattern = null;
+    if (key === 'body') bodyPattern = bodyTile = null;
+    if (key === 'clouds') cloudTile = null;
+    if (key === 'ice') iceCubes = [];
+    if (useGL && ['head', 'body', 'condensation'].includes(key)) {
+      GLR.setTexture(key === 'condensation' ? 'cond' : key, null);
+    }
+  }
   for (const [key, file] of Object.entries(want)) {
+    if (textureRequests.has(key)) continue;
+    const request = { file, tint: drink.creamClouds };
+    textureRequests.set(key, request);
     const img = new Image();
     img.onload = () => {
+      if (textureRequests.get(key) !== request) return;
       TEX[key] = img;
       if (key === 'head') {
-        headPattern = buildHeadPattern2(img);
-        if (useGL) GLR.setTexture('head', seamless(img, 'x'));
+        const tile = seamless(img, 'x');
+        headPattern = ctx.createPattern(tile, 'repeat');
+        if (useGL) GLR.setTexture('head', tile);
       }
       if (key === 'body') {
         bodyTile = seamless(seamless(img, 'x'), 'y');
@@ -2438,19 +2563,24 @@ function loadTextures() {
         if (useGL) GLR.setTexture('body', bodyTile);
       }
       if (key === 'condensation' && useGL) GLR.setTexture('cond', img);
-      if (key === 'clouds') cloudTile = tintClouds(img, drink.creamClouds);
+      if (key === 'clouds') cloudTile = tintClouds(img, request.tint);
       if (key === 'ice') { TEX.ice = lumaAlpha(img); iceCubes = splitIce(TEX.ice); }
       if (key === 'roomPhoto') {
         sprites.room = buildRoom();
         if (useGL) GLR.setTexture('room', sprites.room);
       }
     };
-    img.src = `textures/${file}.${['lemon', 'scoop'].includes(key) ? 'png' : 'jpg'}`;
+    const ext = key === 'lemon' || key === 'scoop' ? 'png' : 'jpg';
+    img.onerror = () => {
+      if (textureRequests.get(key) !== request) return;
+      if (webpTextures.has(file) && img.src.endsWith('.webp')) {
+        img.src = `textures/${file}.${ext}`;
+      } else {
+        textureRequests.delete(key);
+      }
+    };
+    img.src = `textures/${file}.${webpTextures.has(file) ? 'webp' : ext}`;
   }
-}
-
-function buildHeadPattern2(img) {
-  return ctx.createPattern(seamless(img, 'x'), 'repeat');
 }
 
 // Make an image tile without a visible seam along one axis: blend in a copy
@@ -2607,7 +2737,11 @@ function renderActions() {
       b.textContent = label;
       b.setAttribute('aria-label', name);
       b.disabled = disabled;
-      b.addEventListener('click', () => { if (onClick()) renderActions(); });
+      b.addEventListener('click', () => {
+        if (!onClick()) return;
+        saveIce();
+        renderActions();
+      });
       wrap.appendChild(b);
     };
     step('\u2212', 'Less ice', removeIce, ice.length === 0);
@@ -2660,8 +2794,7 @@ function setupPicker() {
   renderActions();
 }
 
-// Change drink or extras in place. A new drink is poured fresh; a change of
-// extras keeps the glass as it is (creamer pours in, ice drops in).
+// Changing drinks leaves an empty glass. Changing extras keeps the drink as is.
 function switchDrink(name, mods) {
   const fresh = name !== drinkName;
   const added = fresh ? [] : mods.filter(id => !activeMods.includes(id));
@@ -2678,11 +2811,11 @@ function switchDrink(name, mods) {
   q.set('drink', name);
   q.set('mods', mods.join(','));
   history.replaceState(null, '', `?${q}`);
-  for (const k of Object.keys(TEX)) if (k !== 'roomPhoto') delete TEX[k];
-  headPattern = bodyPattern = bodyTile = cloudTile = null;
-  if (useGL) for (const k of ['body', 'head', 'cond']) GLR.setTexture(k, null);
-  sprites = buildSprites();
-  if (useGL) GLR.setTexture('room', sprites.room);
+  if (useGL && !GLR.prepare(drink.gl.mode3d)) {
+    useGL = false;
+    glCanvas.hidden = true;
+  }
+  sprites = buildSprites(sprites.room);
   loadTextures();
   beersDrunk = loadCount();
   legs = [];
@@ -2695,7 +2828,11 @@ function switchDrink(name, mods) {
     creamAmt = 0;
     beer = 0;
     foamExtra = 0;
-    if (!startEl.hidden) beer = FULL; else refill();
+    stopFizz();
+    state = 'empty';
+    addPour = null;
+    pendingExtras = [];
+    for (const key of Object.keys(floatState)) delete floatState[key];
   } else if (drink.fizz <= 0) {
     bubbles = [];
   }
@@ -2714,9 +2851,12 @@ function switchDrink(name, mods) {
 // ---------- boot ----------
 
 document.getElementById('start-btn').addEventListener('click', start);
+pourBtn.addEventListener('click', () => {
+  if (state === 'empty') refill();
+});
 let iceShown = 0;
 loadTextures();
-useGL = !params.has('gl') || params.get('gl') !== '0' ? GLR.init(glCanvas) : false;
+useGL = params.get('gl') !== '0' && GLR.init(glCanvas, drink.gl.mode3d);
 if (!useGL) glCanvas.hidden = true;
 setupPicker();
 document.getElementById('prev').addEventListener('click', () => stepDrink(-1));
@@ -2737,7 +2877,7 @@ window.addEventListener('pointerup', e => {
 });
 
 function tapGlass(e) {
-  if (state === 'empty') { refill(); return; }
+  if (state === 'empty') return;
   // Tapping the glass sends a ripple and knocks loose a few bubbles.
   const r = canvas.getBoundingClientRect();
   const m = new DOMMatrix().translate(W / 2, H / 2).rotate(-screenAngle).translate(-PW / 2, -PH / 2).inverse();
@@ -2820,9 +2960,17 @@ if (params.has('tilt') || params.has('sim')) {
   targetAngle = angle = (Number(params.get('tilt')) || 0) * RAD;
   simTilt.value = String(Number(params.get('tilt')) || 0);
   showSimulator();
+  beer = fillLimit();
 }
-if (params.has('beer')) beer = Math.max(0, Math.min(FULL, Number(params.get('beer'))));
-if (params.has('pour')) refill();
+if (params.has('beer')) {
+  const amount = Number(params.get('beer'));
+  if (Number.isFinite(amount)) beer = Math.max(0, Math.min(fillLimit(), amount));
+}
+if (beer > 0) state = 'full';
+if (params.has('pour')) {
+  beer = params.has('beer') ? beer : 0;
+  refill();
+}
 // ?ice=3 starts with cubes already floating; ?pitch=20 leans the glass away.
 {
   const n = params.has('ice') ? Math.min(MAX_ICE, Number(params.get('ice')) || 0) : (drink.gl && drink.gl.mode3d ? savedIce() : 0);

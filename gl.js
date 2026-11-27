@@ -8,7 +8,9 @@
 
 const GLR = (() => {
   let gl = null, prog = null, bubbleProg = null, quad = null, bubbleBuf = null;
-  let loc = {}, bloc = {}, loc3 = {}, prog3d = null, waveTex = null;
+  const loc = {}, bloc = {}, loc3 = {};
+  let prog3d = null, waveTex = null, emptyBubbles = null;
+  let flatPosition, glassPosition, bubbleCorner, bubblePosition;
   const tex = {};
   const WAVES = 128;
 
@@ -81,6 +83,7 @@ uniform vec3 uWallGlow;
 uniform float uShear;       // angular velocity of the slosh, to drag cream and tendrils
 uniform vec3 uScoop;        // ice cream scoop: liquid-frame x, centre y, radius (0 if none)
 uniform float uNoPops;
+uniform vec4 uWineBowl;     // centre y, horizontal radius, vertical radius, rim y
 
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec2 p) {
@@ -131,7 +134,16 @@ void main() {
   float ca = cos(uAngle), sa = sin(uAngle);
   vec2 d = p - c;
   vec2 w = vec2(d.x * ca - d.y * sa, d.x * sa + d.y * ca);
-  float u = (p.x - c.x) / c.x;
+  float halfWidth = c.x;
+  if (uWineBowl.y > 0.0) {
+    float height = (p.y - uWineBowl.x) / uWineBowl.z;
+    halfWidth = uWineBowl.y * sqrt(max(0.0, 1.0 - height * height));
+    if (p.y < uWineBowl.w || abs(p.x - c.x) >= halfWidth) {
+      outColor = vec4(room(p), 1.0);
+      return;
+    }
+  }
+  float u = (p.x - c.x) / max(1.0, halfWidth);
   float thick = sqrt(max(0.02, 1.0 - u * u));
   float t = uT;
 
@@ -699,35 +711,62 @@ void main() {
     return p;
   }
 
-  function init(canvas) {
+  function locateUniforms(program, source, locations) {
+    for (const match of source.matchAll(/uniform\s+\w+\s+(\w+)/g)) {
+      locations[match[1]] = gl.getUniformLocation(program, match[1]);
+    }
+  }
+
+  function prepare(mode3d) {
+    if (!gl) return false;
+    try {
+      if (mode3d && !prog3d) {
+        prog3d = link(VERT, FRAG3D);
+        glassPosition = gl.getAttribLocation(prog3d, 'aPos');
+        locateUniforms(prog3d, FRAG3D, loc3);
+        waveTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, waveTex);
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R32F, WAVES, 2);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      } else if (!mode3d && !prog) {
+        prog = link(VERT, FRAG);
+        flatPosition = gl.getAttribLocation(prog, 'aPos');
+        locateUniforms(prog, FRAG, loc);
+      }
+    } catch (e) {
+      gl = null;
+      console.warn('WebGL unavailable, using the 2D renderer:', e.message);
+      return false;
+    }
+    return true;
+  }
+
+  function init(canvas, mode3d) {
     try {
       gl = canvas.getContext('webgl2', { antialias: false, premultipliedAlpha: true, alpha: false });
-      if (!gl) return false;
-      prog = link(VERT, FRAG);
+      if (!gl || !prepare(mode3d)) return false;
       bubbleProg = link(BVERT, BFRAG);
-      prog3d = link(VERT, FRAG3D);
     } catch (e) {
-      console.warn('WebGL unavailable, using the 2D renderer:', e.message);
       gl = null;
+      console.warn('WebGL unavailable, using the 2D renderer:', e.message);
       return false;
     }
     quad = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, quad);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
     bubbleBuf = gl.createBuffer();
-    const names = (src) => [...src.matchAll(/uniform\s+\w+\s+(\w+)/g)].map(m => m[1]);
-    for (const n of names(FRAG)) loc[n] = gl.getUniformLocation(prog, n);
-    for (const n of names(BVERT + BFRAG)) bloc[n] = gl.getUniformLocation(bubbleProg, n);
-    for (const n of names(FRAG3D)) loc3[n] = gl.getUniformLocation(prog3d, n);
-    waveTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, waveTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, 128, 2, 0, gl.RED, gl.FLOAT, new Float32Array(256));
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    locateUniforms(bubbleProg, BVERT + BFRAG, bloc);
+    bubbleCorner = gl.getAttribLocation(bubbleProg, 'aCorner');
+    bubblePosition = gl.getAttribLocation(bubbleProg, 'aBubble');
     // Placeholders until the real textures arrive.
     for (const k of ['room', 'cond', 'body', 'head', 'float']) setTexture(k, null);
+    emptyBubbles = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, emptyBubbles);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1, 1);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     return true;
   }
 
@@ -773,12 +812,11 @@ void main() {
   const rgb = (s) => s.match(/[\d.]+/g).slice(0, 3).map(v => Number(v) / 255);
 
   function render(s) {
-    drawBubbles(s);
+    const bubbles = drawBubbles(s);
     gl.useProgram(prog);
     gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-    const aPos = gl.getAttribLocation(prog, 'aPos');
-    gl.enableVertexAttribArray(aPos);
-    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(flatPosition);
+    gl.vertexAttribPointer(flatPosition, 2, gl.FLOAT, false, 0, 0);
     gl.disable(gl.BLEND);
 
     const f1 = (n, v) => loc[n] && gl.uniform1f(loc[n], v);
@@ -838,6 +876,9 @@ void main() {
     f1('uShear', s.shear);
     v3('uScoop', s.scoop);
     f1('uNoPops', L.noPops ? 1 : 0);
+    const bowl = s.wineBowl;
+    if (bowl) gl.uniform4f(loc.uWineBowl, bowl.cy, bowl.rx, bowl.ry, bowl.rim);
+    else gl.uniform4f(loc.uWineBowl, 0, 0, 0, 0);
 
     const bind = (unit, key, name) => {
       gl.activeTexture(gl.TEXTURE0 + unit);
@@ -850,7 +891,7 @@ void main() {
     bind(3, 'head', 'uHeadTex');
     bind(4, 'float', 'uFloat');
     gl.activeTexture(gl.TEXTURE5);
-    gl.bindTexture(gl.TEXTURE_2D, bubbleTex);
+    gl.bindTexture(gl.TEXTURE_2D, bubbles);
     i1('uBubbles', 5);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
@@ -859,6 +900,8 @@ void main() {
   // inside the liquid, under the glass and condensation.
   let bubbleFbo = null, bubbleTex = null, fboW = 0, fboH = 0;
   function drawBubbles(s) {
+    const n = s.bubbles.length / 3;
+    if (n === 0) return emptyBubbles;
     const W = gl.canvas.width, H = gl.canvas.height;
     if (!bubbleFbo || fboW !== W || fboH !== H) {
       bubbleTex = bubbleTex || gl.createTexture();
@@ -877,42 +920,37 @@ void main() {
     gl.viewport(0, 0, W, H);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    const n = s.bubbles.length / 3;
-    if (n > 0) {
-      gl.useProgram(bubbleProg);
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-      gl.uniform2f(bloc.uRes, gl.canvas.width, gl.canvas.height);
-      gl.uniform1f(bloc.uDpr, s.dpr);
-      gl.uniformMatrix3fv(bloc.uFwd, false, s.fwd);
-      gl.uniform3fv(bloc.uTint, s.bubbleTint);
-      const aCorner = gl.getAttribLocation(bubbleProg, 'aCorner');
-      const aBubble = gl.getAttribLocation(bubbleProg, 'aBubble');
-      gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-      gl.enableVertexAttribArray(aCorner);
-      gl.vertexAttribPointer(aCorner, 2, gl.FLOAT, false, 0, 0);
-      gl.vertexAttribDivisor(aCorner, 0);
-      gl.bindBuffer(gl.ARRAY_BUFFER, bubbleBuf);
-      gl.bufferData(gl.ARRAY_BUFFER, s.bubbles, gl.DYNAMIC_DRAW);
-      gl.enableVertexAttribArray(aBubble);
-      gl.vertexAttribPointer(aBubble, 3, gl.FLOAT, false, 0, 0);
-      gl.vertexAttribDivisor(aBubble, 1);
-      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, n);
-      gl.vertexAttribDivisor(aBubble, 0);
-      gl.disableVertexAttribArray(aBubble);
-    }
+    gl.useProgram(bubbleProg);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.uniform2f(bloc.uRes, gl.canvas.width, gl.canvas.height);
+    gl.uniform1f(bloc.uDpr, s.dpr);
+    gl.uniformMatrix3fv(bloc.uFwd, false, s.fwd);
+    gl.uniform3fv(bloc.uTint, s.bubbleTint);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.enableVertexAttribArray(bubbleCorner);
+    gl.vertexAttribPointer(bubbleCorner, 2, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(bubbleCorner, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bubbleBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, s.bubbles, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(bubblePosition);
+    gl.vertexAttribPointer(bubblePosition, 3, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(bubblePosition, 1);
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, n);
+    gl.vertexAttribDivisor(bubblePosition, 0);
+    gl.disableVertexAttribArray(bubblePosition);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, W, H);
+    return bubbleTex;
   }
 
   // The 3D glass. `s.waves` is 256 floats: 128 across, then 128 front to back.
   function render3d(s) {
-    drawBubbles(s);
+    const bubbles = drawBubbles(s);
     gl.useProgram(prog3d);
     gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-    const aPos = gl.getAttribLocation(prog3d, 'aPos');
-    gl.enableVertexAttribArray(aPos);
-    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(glassPosition);
+    gl.vertexAttribPointer(glassPosition, 2, gl.FLOAT, false, 0, 0);
     gl.disable(gl.BLEND);
     const L = loc3;
     gl.uniform2f(L.uRes, gl.canvas.width, gl.canvas.height);
@@ -936,7 +974,7 @@ void main() {
     bind(0, tex.room, 'uRoom');
     bind(1, tex.cond, 'uCond');
     bind(2, tex.float, 'uFloat');
-    bind(3, bubbleTex, 'uBubbles');
+    bind(3, bubbles, 'uBubbles');
     gl.activeTexture(gl.TEXTURE4);
     gl.bindTexture(gl.TEXTURE_2D, waveTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 128, 2, gl.RED, gl.FLOAT, s.waves);
@@ -944,5 +982,5 @@ void main() {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
-  return { init, setTexture, updateLayer, resize, render, render3d, rgb, WAVES, get ok() { return !!gl; } };
+  return { init, prepare, setTexture, updateLayer, resize, render, render3d, rgb, WAVES, get ok() { return !!gl; } };
 })();
