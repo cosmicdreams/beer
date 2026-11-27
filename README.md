@@ -8,16 +8,23 @@ Drinks: beer, butterbeer, root beer, wine, coffee and water. Pick one on the
 start screen, or open `?drink=wine` (`beer`, `butterbeer`, `rootbeer`, `wine`,
 `coffee`, `water`).
 
-Some drinks have extras, shown as chips under the drink picker:
+Swipe sideways (or tap the arrows at the top) to change drinks. The buttons
+along the bottom add things to the drink in the glass, one tap each:
 
-| Drink | Extras |
+| Drink | Buttons |
 |---|---|
-| Coffee | creamer, cold foam |
-| Water | ice, lemon, sparkling |
-| Root beer | ice cream float |
-| Wine | red, white or rosé |
+| Water | Ice (one cube per tap, up to five), Lemon, Fizz |
+| Coffee | Creamer, Cold foam |
+| Root beer | Ice cream |
+| Wine | one button that cycles red, white, rosé |
 
-Open them directly with `?mods=`, for example `?drink=water&mods=ice,lemon`.
+**Feedback** (top left) opens a short form. It posts to GitHub Discussions in
+this repo, where a comment can be turned into an issue. Today it opens a
+prefilled discussion on GitHub, so the tester needs a GitHub login; set
+`FEEDBACK_ENDPOINT` in `app.js` to a small relay that holds a token to make
+it anonymous.
+
+Open them directly with `?mods=`, for example `?drink=water&mods=lemon&ice=3`.
 The drink, its extras and a count per drink are kept in `localStorage`.
 
 ## Core loop
@@ -62,6 +69,13 @@ motion permission when you tap **Pour one**.
   the glass or the depths, speeds up, swells and wobbles until it reaches
   the surface. Water, white wine and rosé are see-through: the room behind
   shows through them, shifted a little by refraction.
+- Water uses a 3D glass (`FRAG3D` in `gl.js`): each pixel's line of sight is
+  traced through a cylinder of glass and water. It reflects off the glass,
+  bends into the water, mirrors off the underside of the surface, passes
+  through rounded, cloudy ice cubes, and bends out the back wall to the room
+  photo behind. The surface sloshes side to side and front to back, and ice
+  cubes fall in, bob, drift and knock together. The other drinks still use
+  the flat WebGL renderer, and phones without WebGL2 the 2D one.
 - Drawn on top in code: the tilt and slosh, lacing,
   wine legs that form after a swirl, steam, the pour, and glass highlights.
   Until the photos load, gradients stand in.

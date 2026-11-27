@@ -12,29 +12,41 @@
   <canvas id="gl"></canvas>
   <canvas id="scene"></canvas>
 
-  <div id="hud">
-    <div id="message" hidden></div>
+  <div id="topbar">
+    <button id="fb-btn" type="button">Feedback</button>
+    <div id="drink-nav">
+      <button id="prev" type="button" aria-label="Previous drink">&lsaquo;</button>
+      <div>
+        <div id="drink-name"></div>
+        <div id="dots" aria-hidden="true"></div>
+      </div>
+      <button id="next" type="button" aria-label="Next drink">&rsaquo;</button>
+    </div>
     <div id="count"></div>
   </div>
+
+  <div id="message" hidden></div>
+  <div id="actions" role="group" aria-label="Add to your drink" hidden></div>
 
   <label id="sim" hidden>
     Tilt <input id="sim-tilt" type="range" min="-180" max="180" value="0">
   </label>
 
-  <button id="extras-btn" type="button" hidden>Drinks &amp; extras</button>
-  <div id="sheet" hidden>
-    <div id="sheet-drinks" class="chips" role="group" aria-label="Pick a drink"></div>
-    <div id="sheet-mods" class="chips mods" role="group" aria-label="Extras"></div>
-    <button id="sheet-done" type="button">Done</button>
-  </div>
-
   <div id="start">
     <h1 id="title">BEER</h1>
-    <div id="picker" role="group" aria-label="Pick a drink"></div>
-    <div id="mods" role="group" aria-label="Extras" hidden></div>
-    <p>Hold your phone like a glass, screen facing out, and tip the top edge to your lips.</p>
+    <p>Swipe to change drinks. Hold your phone like a glass, screen facing out, and tip the top edge to your lips.</p>
     <button id="start-btn" type="button">Pour one</button>
   </div>
+
+  <form id="feedback" hidden>
+    <h2>Feedback</h2>
+    <textarea id="fb-text" rows="5" placeholder="What looked or felt wrong? What would make it more real?" required></textarea>
+    <p id="fb-note">Opens GitHub with your note, plus the drink, your screen size, browser and frame rate.</p>
+    <div class="row">
+      <button id="fb-cancel" type="button">Cancel</button>
+      <button id="fb-send" type="submit">Send</button>
+    </div>
+  </form>
 
   <script src="gl.js"></script>
   <script src="app.js"></script>

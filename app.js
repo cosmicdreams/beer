@@ -2130,11 +2130,16 @@ function drawHud() {
   else if (state === 'empty') text = 'Cheers! Hold it upright for another';
   else if (state === 'full' && !drankOnce) text = 'Tip it to your lips';
   if (messageEl.textContent !== text) messageEl.textContent = text;
-  const showExtras = startEl.hidden;
-  if (extrasBtn.hidden === showExtras) extrasBtn.hidden = !showExtras;
+  const showActions = startEl.hidden && actionsEl.childElementCount > 0;
+  if (actionsEl.hidden === showActions) actionsEl.hidden = !showActions;
   messageEl.hidden = !text;
-  const count = `${beersDrunk} ${drink.unit[beersDrunk === 1 ? 0 : 1]}`;
-  if (countEl.textContent !== count) countEl.textContent = count;
+  const count = `${beersDrunk} drunk`;
+  if (countEl.textContent !== count) {
+    countEl.textContent = count;
+    countEl.setAttribute('aria-label', `${beersDrunk} ${drink.unit[beersDrunk === 1 ? 0 : 1]} drunk`);
+  }
+  // The Ice button shows how many cubes are in the glass.
+  if (iceShown !== ice.length) { iceShown = ice.length; renderActions(); }
 }
 
 // ---------- sound and haptics ----------
@@ -2528,36 +2533,56 @@ function loadDrink() {
   try { return localStorage.getItem('beer.drink'); } catch { return null; }
 }
 
-// Drink and extras chips, on the start screen and in the in-glass sheet.
+// Drinks are picked by swiping (or the arrows); extras are the bottom buttons.
 // Picking one switches live: no reload, and extras keep what's in the glass.
 const DRINK_LABELS = { beer: 'Beer', butterbeer: 'Butterbeer', rootbeer: 'Root beer', wine: 'Wine', coffee: 'Coffee', water: 'Water' };
 
-function renderChips(drinksEl, modsEl) {
-  drinksEl.textContent = '';
-  for (const [name, label] of Object.entries(DRINK_LABELS)) {
+const DRINK_ORDER = Object.keys(DRINK_LABELS);
+const actionsEl = document.getElementById('actions');
+
+// The bottom buttons: what you can add to this drink. One tap each.
+const ACTION_LABELS = { lemon: 'Lemon', sparkling: 'Fizz', creamer: 'Creamer', coldfoam: 'Cold foam', float: 'Ice cream' };
+function renderActions() {
+  actionsEl.textContent = '';
+  const button = (label, onClick, pressed) => {
     const b = document.createElement('button');
     b.type = 'button';
-    b.textContent = label;
-    b.setAttribute('aria-pressed', String(name === drinkName));
-    b.addEventListener('click', () => { if (name !== drinkName) switchDrink(name, savedMods(name)); });
-    drinksEl.appendChild(b);
-  }
-  modsEl.textContent = '';
-  const all = MODS[drinkName] || {};
-  modsEl.hidden = !Object.keys(all).length;
-  for (const [id, mod] of Object.entries(all)) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = mod.label;
-    const on = activeMods.includes(id) || (mod.group && id === 'red' && !activeMods.some(m => all[m].group === mod.group));
-    b.setAttribute('aria-pressed', String(on));
-    b.addEventListener('click', () => {
-      const next = activeMods.filter(m => m !== id && !(mod.group && all[m].group === mod.group));
-      if (!on || mod.group) next.push(id);
-      switchDrink(drinkName, next);
+    b.innerHTML = label;
+    if (pressed != null) b.setAttribute('aria-pressed', String(pressed));
+    b.addEventListener('click', onClick);
+    actionsEl.appendChild(b);
+    return b;
+  };
+  if (drink.gl && drink.gl.mode3d && useGL) {
+    // Ice: each tap drops in one more cube, up to five.
+    const b = button(`Ice<small>${ice.length}/${MAX_ICE}</small>`, () => {
+      if (beer > 0.05 && state !== 'refilling' && addIce()) renderActions();
     });
-    modsEl.appendChild(b);
+    b.disabled = ice.length >= MAX_ICE;
   }
+  const all = MODS[drinkName] || {};
+  const group = Object.keys(all).filter(id => all[id].group);
+  if (group.length) {
+    // One button that cycles through the choices (wine: red, white, rosé).
+    const current = activeMods.find(id => all[id].group) || group[0];
+    button(all[current].label, () => {
+      const next = group[(group.indexOf(current) + 1) % group.length];
+      switchDrink(drinkName, [...activeMods.filter(id => !all[id].group), next]);
+    });
+  }
+  for (const id of Object.keys(all)) {
+    if (all[id].group) continue;
+    const on = activeMods.includes(id);
+    button(ACTION_LABELS[id] || all[id].label, () => {
+      switchDrink(drinkName, on ? activeMods.filter(m => m !== id) : [...activeMods, id]);
+    }, on);
+  }
+}
+
+function stepDrink(dir) {
+  const i = DRINK_ORDER.indexOf(drinkName);
+  const name = DRINK_ORDER[(i + dir + DRINK_ORDER.length) % DRINK_ORDER.length];
+  switchDrink(name, savedMods(name));
 }
 
 function savedMods(name) {
@@ -2565,10 +2590,17 @@ function savedMods(name) {
 }
 
 function setupPicker() {
-  renderChips(document.getElementById('picker'), document.getElementById('mods'));
-  renderChips(document.getElementById('sheet-drinks'), document.getElementById('sheet-mods'));
   document.getElementById('title').textContent = drink.title;
   document.title = drink.title;
+  document.getElementById('drink-name').textContent = DRINK_LABELS[drinkName];
+  const dots = document.getElementById('dots');
+  dots.textContent = '';
+  for (const name of DRINK_ORDER) {
+    const d = document.createElement('i');
+    if (name === drinkName) d.className = 'on';
+    dots.appendChild(d);
+  }
+  renderActions();
 }
 
 // Change drink or extras in place. A new drink is poured fresh; a change of
@@ -2622,16 +2654,29 @@ function switchDrink(name, mods) {
 // ---------- boot ----------
 
 document.getElementById('start-btn').addEventListener('click', start);
-const sheetEl = document.getElementById('sheet');
-const extrasBtn = document.getElementById('extras-btn');
-extrasBtn.addEventListener('click', e => { e.stopPropagation(); sheetEl.hidden = false; });
-document.getElementById('sheet-done').addEventListener('click', e => { e.stopPropagation(); sheetEl.hidden = true; });
-sheetEl.addEventListener('pointerdown', e => e.stopPropagation());
-setupPicker();
+let iceShown = 0;
 loadTextures();
 useGL = !params.has('gl') || params.get('gl') !== '0' ? GLR.init(glCanvas) : false;
 if (!useGL) glCanvas.hidden = true;
-canvas.addEventListener('pointerdown', e => {
+setupPicker();
+document.getElementById('prev').addEventListener('click', () => stepDrink(-1));
+document.getElementById('next').addEventListener('click', () => stepDrink(1));
+
+// Swipe sideways anywhere to change drink; a tap on the glass ripples it.
+let swipeFrom = null;
+window.addEventListener('pointerdown', e => {
+  if (e.target.closest('button, form, label')) { swipeFrom = null; return; }
+  swipeFrom = { x: e.clientX, y: e.clientY, t: performance.now() };
+});
+window.addEventListener('pointerup', e => {
+  if (!swipeFrom) return;
+  const dx = e.clientX - swipeFrom.x, dy = e.clientY - swipeFrom.y, dt = performance.now() - swipeFrom.t;
+  swipeFrom = null;
+  if (Math.abs(dx) > 50 && Math.abs(dx) > 1.5 * Math.abs(dy) && dt < 700) stepDrink(dx < 0 ? 1 : -1);
+  else if (Math.abs(dx) < 12 && Math.abs(dy) < 12 && e.target === canvas) tapGlass(e);
+});
+
+function tapGlass(e) {
   if (state === 'empty') { refill(); return; }
   // Tapping the glass sends a ripple and knocks loose a few bubbles.
   const r = canvas.getBoundingClientRect();
@@ -2648,7 +2693,52 @@ canvas.addEventListener('pointerdown', e => {
       bubbles.push(b);
     }
   }
+}
+
+// ---------- feedback ----------
+
+// Comments go to GitHub Discussions, where they can be turned into issues.
+// With FEEDBACK_ENDPOINT set to a relay URL, the form posts there without a
+// GitHub login; without one it opens a prefilled discussion on GitHub.
+const FEEDBACK_ENDPOINT = '';
+const FEEDBACK_REPO = 'cosmicdreams/beer';
+const feedbackEl = document.getElementById('feedback');
+const fbText = document.getElementById('fb-text');
+let fps = 60;
+
+function feedbackDetails() {
+  return [
+    `Drink: ${drinkName}${activeMods.length ? ` (${activeMods.join(', ')})` : ''}${ice.length ? `, ${ice.length} ice` : ''}`,
+    `Renderer: ${useGL ? (drink.gl.mode3d ? 'WebGL 3D' : 'WebGL') : '2D fallback'}, about ${Math.round(fps)} fps`,
+    `Screen: ${W}x${H} at ${window.devicePixelRatio || 1}x, tilt sensor ${gotSensor ? 'yes' : 'no'}`,
+    `Browser: ${navigator.userAgent}`,
+  ].join('\n');
+}
+
+document.getElementById('fb-btn').addEventListener('click', () => { feedbackEl.hidden = false; fbText.focus(); });
+document.getElementById('fb-cancel').addEventListener('click', () => { feedbackEl.hidden = true; });
+feedbackEl.addEventListener('submit', async e => {
+  e.preventDefault();
+  const text = fbText.value.trim();
+  if (!text) return;
+  const title = `Feedback: ${text.split('\n')[0].slice(0, 60)}`;
+  const body = `${text}\n\n---\n${feedbackDetails()}`;
+  if (FEEDBACK_ENDPOINT) {
+    try {
+      const r = await fetch(FEEDBACK_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, body }) });
+      if (!r.ok) throw new Error(String(r.status));
+    } catch {
+      document.getElementById('fb-note').textContent = 'Could not send. Check your connection and try again.';
+      return;
+    }
+  } else {
+    const q = new URLSearchParams({ category: 'general', title, body });
+    window.open(`https://github.com/${FEEDBACK_REPO}/discussions/new?${q}`, '_blank', 'noopener');
+  }
+  fbText.value = '';
+  feedbackEl.hidden = true;
 });
+
 let lastAcc = null;
 window.addEventListener('devicemotion', e => {
   const a = e.accelerationIncludingGravity;
@@ -2682,6 +2772,7 @@ function frame(now) {
   // Clamp: a zero-length first frame would divide by zero in update().
   const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000));
   last = now;
+  fps += (1 / dt - fps) * 0.05;
   draw(update(dt));
   requestAnimationFrame(frame);
 }
