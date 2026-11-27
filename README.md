@@ -4,10 +4,21 @@ Idea from Nolan: the whole phone screen is a glass of beer. Tip the phone to
 your lips like a pint and the beer stays level, sloshes, and drains out over
 the top edge into your mouth.
 
-Drinks: beer, butterbeer, root beer, wine and coffee. Pick one on the start
-screen, or open `?drink=wine` (`beer`, `butterbeer`, `rootbeer`, `wine`,
-`coffee`). The choice and a separate count per drink are kept in
-`localStorage`.
+Drinks: beer, butterbeer, root beer, wine, coffee and water. Pick one on the
+start screen, or open `?drink=wine` (`beer`, `butterbeer`, `rootbeer`, `wine`,
+`coffee`, `water`).
+
+Some drinks have extras, shown as chips under the drink picker:
+
+| Drink | Extras |
+|---|---|
+| Coffee | creamer, cold foam |
+| Water | ice, lemon, sparkling |
+| Root beer | ice cream float |
+| Wine | red, white or rosé |
+
+Open them directly with `?mods=`, for example `?drink=water&mods=ice,lemon`.
+The drink, its extras and a count per drink are kept in `localStorage`.
 
 ## Core loop
 
@@ -47,7 +58,11 @@ motion permission when you tap **Pour one**.
   against gravity, swirls drift, light wanders through still drinks, the
   liquid and head slide with the slosh, foam bubbles pop, and condensation
   drops run down. The head is drawn offscreen and faded into the liquid.
-- Drawn on top in code: the tilt and slosh, rising bubble trails, lacing,
+- Bubbles are particles, not part of the photos: each rises from a spot on
+  the glass or the depths, speeds up, swells and wobbles until it reaches
+  the surface. Water, white wine and rosé are see-through: the room behind
+  shows through them, shifted a little by refraction.
+- Drawn on top in code: the tilt and slosh, lacing,
   wine legs that form after a swirl, steam, the pour, and glass highlights.
   Until the photos load, gradients stand in.
 - Glug sounds (Web Audio), a fizz while pouring, vibration (Android only), and

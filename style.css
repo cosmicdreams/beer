@@ -98,6 +98,30 @@ html, body {
   background: rgba(30, 14, 2, 0.35);
   color: #fff8e8;
 }
+#mods {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: -6px 0 14px;
+  max-width: 22em;
+}
+#mods[hidden] { display: none; }
+#mods button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px dashed rgba(255, 248, 232, 0.6);
+  background: transparent;
+  color: #fff8e8;
+}
+#mods button[aria-pressed="true"] {
+  border-style: solid;
+  background: rgba(255, 248, 232, 0.85);
+  color: #3a1c04;
+}
 #picker button[aria-pressed="true"] {
   background: #fff8e8;
   color: #3a1c04;
