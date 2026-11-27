@@ -12,17 +12,17 @@
   <canvas id="scene"></canvas>
 
   <div id="hud">
-    <div id="message">Tip your phone to drink</div>
+    <div id="message" hidden></div>
     <div id="count"></div>
   </div>
 
   <label id="sim" hidden>
-    Tilt <input id="sim-tilt" type="range" min="0" max="150" value="0">
+    Tilt <input id="sim-tilt" type="range" min="-180" max="180" value="0">
   </label>
 
   <div id="start">
     <h1>BEER</h1>
-    <p>Hold your phone like a pint, then tip it back.</p>
+    <p>Hold your phone like a pint, screen facing out, and tip the top edge to your lips.</p>
     <button id="start-btn" type="button">Pour one</button>
   </div>
 
