@@ -10,7 +10,7 @@
 'use strict';
 
 const canvas = document.getElementById('scene');
-const ctx = canvas.getContext('2d');
+let ctx = canvas.getContext('2d'); // swapped briefly to draw the head offscreen
 const messageEl = document.getElementById('message');
 const countEl = document.getElementById('count');
 const simEl = document.getElementById('sim');
@@ -43,7 +43,7 @@ const DRINKS = {
     glow: 'rgba(255, 214, 120, 0.34)', glowAt: 'center', band: '255, 236, 200', bandAlpha: 0,
     walls: 'dark', edge: '80, 40, 8', milk: 0.06, cloudy: true,
     foam: 0.07, foamShade: ['#fffdf8', '#f6ead0', '#e6cb92'], speck: '255, 252, 242', grain: '214, 176, 116',
-    headScale: 0.48, headWash: 'rgba(239, 227, 196, 0.45)', rise: [4, 0], swirl: true, seam: '243, 213, 155', fresh: 0.04, fizz: 0.45, drops: 1, burp: true, pour: ['#a8681e', '#e9b45c', '#fbe0a8'],
+    headScale: 0.48, headWash: 'rgba(239, 228, 196, 0.3)', rise: [4, 0], swirl: true, seam: '243, 213, 155', fresh: 0.04, fizz: 0.45, drops: 1, burp: true, pour: ['#a8681e', '#e9b45c', '#fbe0a8'],
   },
   rootbeer: {
     title: 'ROOT BEER', unit: ['root beer', 'root beers'], head: 'foam',
@@ -55,18 +55,18 @@ const DRINKS = {
   },
   wine: {
     title: 'WINE', unit: ['glass of wine', 'glasses of wine'], head: 'none',
-    body: ['#6e0a1c', '#4a0614', '#3a0410', '#1a0207'],
-    glow: 'rgba(158, 18, 52, 0.55)', glowAt: 'surface', glowDepth: 110, ruby: true, band: '140, 30, 60', bandAlpha: 0,
-    walls: 'lit', edge: '94, 15, 32', milk: 0, legs: true, photoAlpha: 0.3, photoShade: 'rgba(34, 0, 10, 0.2)', caustic: '200, 40, 70',
+    body: ['#8e1430', '#4a0716', '#2a040e', '#140105'],
+    glow: 'rgba(196, 25, 63, 0.45)', glowAt: 'surface', glowDepth: 90, ruby: true, band: '140, 30, 60', bandAlpha: 0,
+    walls: 'lit', edge: '163, 32, 61', milk: 0, legs: true, photoAlpha: 0, caustic: '255, 90, 122', causticAlpha: 0.1,
     foam: 0, fresh: 0, fizz: 0, drops: 0, burp: false, pour: ['#3a0410', '#7a0e2a', '#d04a68'],
   },
   coffee: {
     title: 'COFFEE', unit: ['coffee', 'coffees'], head: 'crema',
     body: ['#24120a', '#160a04', '#0d0602', '#060200'],
     glow: 'rgba(74, 34, 11, 0.8)', glowAt: 'surface', glowDepth: 60, band: '150, 95, 55', bandAlpha: 0,
-    walls: 'lit', edge: '90, 42, 14', milk: 0,
-    foam: 0.014, foamShade: ['#c48a52', '#a8703e', '#8a552a'], speck: '217, 166, 106', grain: '90, 50, 20',
-    headScale: 0.12, headTint: 'rgba(120, 61, 20, 0.3)', bodyTint: 'rgba(20, 8, 2, 0.3)', caustic: '138, 74, 34', fresh: 0.003, fizz: 0, drops: 0, steam: true, burp: false, pour: ['#0d0602', '#2b1608', '#6a3e1e'],
+    walls: 'lit', edge: '115, 51, 16', milk: 0, wallWidth: 0.07,
+    foam: 0.02, foamShade: ['#c48a52', '#a8703e', '#8a552a'], speck: '217, 166, 106', grain: '90, 50, 20',
+    headScale: 0.2, headTint: 'rgba(120, 61, 20, 0.3)', bodyTint: 'rgba(16, 7, 2, 0.4)', caustic: '143, 69, 24', causticAlpha: 0.08, fresh: 0.003, fizz: 0, drops: 0, steam: true, burp: false, pour: ['#0d0602', '#2b1608', '#6a3e1e'],
   },
 };
 const drinkName = DRINKS[params.get('drink')] ? params.get('drink') : (loadDrink() || 'beer');
@@ -97,6 +97,7 @@ let surfL = -1e4, surfR = 1e4; // where the surface meets the glass walls
 let foamCells = [];
 let baseMatrix = null;
 const TEX = {};         // photo textures: body, head, condensation
+let headLayer = null;   // offscreen canvas for the head, so its lower edge can fade out
 let headPattern = null; // the head photo, made seamless so it tiles
 let bodyTile = null;    // the body photo, made seamless vertically, for scrolling
 let bodyPattern = null;
@@ -200,19 +201,21 @@ function buildLegs() {
     const len = 25 + Math.random() * 45;
     const w = 1 + Math.random() * 1.2;
     const tear = g.createLinearGradient(0, y0, 0, y0 + len);
-    tear.addColorStop(0, 'rgba(176, 36, 72, 0)');
-    tear.addColorStop(1, 'rgba(176, 36, 72, 0.12)');
-    g.strokeStyle = tear;
-    g.lineWidth = w;
-    g.lineCap = 'round';
-    g.beginPath();
-    g.moveTo(x, y0);
-    g.quadraticCurveTo(x + (Math.random() - 0.5) * 4, y0 + len / 2, x + (Math.random() - 0.5) * 2, y0 + len);
-    g.stroke();
+    tear.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    tear.addColorStop(1, 'rgba(255, 255, 255, 0.15)');
+    const bend = (Math.random() - 0.5) * 4, end = (Math.random() - 0.5) * 2;
+    for (const [dx, style] of [[-w / 2, tear], [w / 2, 'rgba(26, 2, 8, 0.1)']]) {
+      g.strokeStyle = style;
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(x + dx, y0);
+      g.quadraticCurveTo(x + dx + bend, y0 + len / 2, x + dx + end, y0 + len);
+      g.stroke();
+    }
     const by = y0 + len + 1;
-    g.fillStyle = 'rgba(160, 40, 70, 0.16)';
-    g.beginPath(); g.ellipse(x, by, w + 0.4, w + 0.8, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = 'rgba(255, 220, 228, 0.35)';
+    g.fillStyle = 'rgba(255, 255, 255, 0.06)';
+    g.beginPath(); g.ellipse(x + end, by, w + 0.6, w + 1, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = 'rgba(255, 240, 244, 0.5)';
     g.beginPath(); g.arc(x - 0.4, by - 0.6, 0.6, 0, Math.PI * 2); g.fill();
   }
   return legs;
@@ -498,7 +501,7 @@ function foamTop(x) {
   const h = foamHeight();
   const k = FOAM ? Math.min(1, h / (PH * FOAM)) : 0;
   if (drink.head === 'crema') {
-    return wave(x) - h - k * 0.5 * Math.sin(x * 0.03 + 0.4);
+    return wave(x) - h - k * (5 * Math.sin(x * 0.013 + 0.4) + 3 * Math.sin(x * 0.041 + 1.7));
   }
   if (drink.head === 'cream') {
     return wave(x) - h + k * (7 * Math.sin(x * 0.011 + clock * 0.15) + 3.5 * Math.sin(x * 0.029 + 2.2) + 1.2 * Math.sin(x * 0.083));
@@ -513,7 +516,7 @@ function foamTop(x) {
 
 // Without a head, the surface curls up a few pixels where it meets the glass.
 function surfaceAt(level, x) {
-  const curl = FOAM ? 0 : 6 * (Math.exp(-Math.max(0, x - surfL) / 7) + Math.exp(-Math.max(0, surfR - x) / 7));
+  const curl = FOAM ? 0 : 7 * (Math.exp(-Math.max(0, x - surfL) / 15) + Math.exp(-Math.max(0, surfR - x) / 15));
   return level + wave(x) - curl;
 }
 
@@ -761,11 +764,11 @@ function draw(level) {
     ctx.globalCompositeOperation = 'screen';
     ctx.globalAlpha = 0.8;
     // Flip it per drink so each glass has its own drops.
-    const flip = { beer: [1, 1], butterbeer: [-1, 1], rootbeer: [-1, 1] }[drinkName] || [1, 1];
+    const flip = { beer: [1, 1, 0.5], butterbeer: [-1, 1, 0.5], rootbeer: [1, 1, 0] }[drinkName] || [1, 1, 0.5];
     ctx.save();
     ctx.translate(flip[0] < 0 ? PW : 0, flip[1] < 0 ? PH : 0);
     ctx.scale(flip[0], flip[1]);
-    drawCover(TEX.condensation);
+    drawCover(TEX.condensation, flip[2]);
     ctx.restore();
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
@@ -806,7 +809,7 @@ function drawLiquid(level) {
 
   ctx.save();
   ctx.clip();
-  const photo = !!TEX.body;
+  const photo = !!TEX.body && drink.photoAlpha !== 0;
   if (photo) {
     ctx.globalAlpha = drink.photoAlpha ?? 1;
     drawLiveBody(level);
@@ -856,6 +859,21 @@ function drawLiquid(level) {
       ctx.fillStyle = cg;
       ctx.fillRect(x - r, y - r, r * 2, r * 2);
     }
+  }
+  if (!photo && drink.caustic) {
+    const m = ctx.getTransform();
+    ctx.setTransform(baseMatrix);
+    for (let i = 0; i < 3; i++) {
+      const x = PW * (0.5 + 0.42 * Math.sin(clock * (0.35 + i * 0.12) + i * 2.1) + liquidShift / PW);
+      const y = PH * (0.4 + 0.32 * Math.sin(clock * (0.27 + i * 0.09) + i * 1.3));
+      const r = PW * (0.2 + 0.08 * i);
+      const cg = ctx.createRadialGradient(x, y, 0, x, y, r);
+      cg.addColorStop(0, `rgba(${drink.caustic}, ${drink.causticAlpha || 0.14})`);
+      cg.addColorStop(1, `rgba(${drink.caustic}, 0)`);
+      ctx.fillStyle = cg;
+      ctx.fillRect(0, 0, PW, PH);
+    }
+    ctx.setTransform(m);
   }
   if (drink.ruby) {
     // Light through the wine, off to one side, and a lighter band under the surface.
@@ -909,7 +927,7 @@ function drawLiveBody(level) {
     layer(1.45, rise2, th * 0.37, 4, 0);
   } else if (drink.swirl) {
     // A second copy drifting the other way, so the swirls change shape.
-    ctx.globalAlpha = 0.45;
+    ctx.globalAlpha = 0.55;
     layer(1.15, -6, th * 0.5, -26, 18);
   }
   ctx.globalCompositeOperation = 'source-over';
@@ -928,7 +946,8 @@ function drawLiveBody(level) {
       const y = PH * (0.45 + 0.32 * Math.sin(clock * (0.27 + i * 0.09) + i * 1.3));
       const r = PW * (0.4 + 0.12 * i);
       const cg = ctx.createRadialGradient(x, y, 0, x, y, r);
-      cg.addColorStop(0, `rgba(${drink.caustic}, ${i ? 0.14 : 0.22})`);
+      const ca = drink.causticAlpha || 0.18;
+      cg.addColorStop(0, `rgba(${drink.caustic}, ${i ? ca * 0.7 : ca})`);
       cg.addColorStop(1, `rgba(${drink.caustic}, 0)`);
       ctx.fillStyle = cg;
       ctx.fillRect(0, 0, PW, PH);
@@ -944,8 +963,8 @@ function drawLiveBody(level) {
     ctx.fillRect(0, 0, PW, PH);
     const h = ctx.createLinearGradient(0, 0, PW, 0);
     h.addColorStop(0, 'rgba(122, 40, 10, 0.5)');
-    h.addColorStop(0.14, 'rgba(122, 40, 10, 0)');
-    h.addColorStop(0.86, 'rgba(122, 40, 10, 0)');
+    h.addColorStop(0.22, 'rgba(122, 40, 10, 0)');
+    h.addColorStop(0.78, 'rgba(122, 40, 10, 0)');
     h.addColorStop(1, 'rgba(122, 40, 10, 0.5)');
     ctx.fillStyle = h;
     ctx.fillRect(0, 0, PW, PH);
@@ -958,7 +977,7 @@ function drawLiveBody(level) {
 function drawWallsInLiquid() {
   const side = ctx.createLinearGradient(0, 0, PW, 0);
   const a = drink.walls === 'lit' ? 0.5 : 0.45;
-  const w = drink.walls === 'lit' ? 0.17 : 0.12;
+  const w = drink.wallWidth || (drink.walls === 'lit' ? 0.17 : 0.12);
   side.addColorStop(0, `rgba(${drink.edge}, ${a})`);
   side.addColorStop(w, `rgba(${drink.edge}, 0)`);
   side.addColorStop(1 - w, `rgba(${drink.edge}, 0)`);
@@ -1017,7 +1036,22 @@ function drawHead(level) {
     }
   }
 
-  headPath(level, crema ? 6 : 6);
+  // Draw the head offscreen, reaching down into the liquid, then fade its
+  // lower edge out with a mask so it melts into the drink.
+  const main = ctx;
+  if (!headLayer || headLayer.width !== canvas.width || headLayer.height !== canvas.height) {
+    headLayer = document.createElement('canvas');
+    headLayer.width = canvas.width;
+    headLayer.height = canvas.height;
+  }
+  const hl = headLayer.getContext('2d');
+  hl.setTransform(1, 0, 0, 1, 0, 0);
+  hl.clearRect(0, 0, headLayer.width, headLayer.height);
+  hl.setTransform(main.getTransform());
+  ctx = hl;
+  const reach = crema ? 10 : 16;
+
+  headPath(level, reach);
   const shade = ctx.createLinearGradient(0, level - h - 8, 0, level + 3);
   shade.addColorStop(0, drink.foamShade[0]);
   shade.addColorStop(0.6, drink.foamShade[1]);
@@ -1035,6 +1069,13 @@ function drawHead(level) {
     ctx.fillStyle = sprites.foam;
   }
   ctx.fillRect(-D, level - h - 30, D * 2, h + 40);
+  if (headPattern && drink.head === 'cream') {
+    // Fine pores over the cream so it reads as aerated foam, not satin.
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = sprites.foam;
+    ctx.fillRect(-D, level - h - 30, D * 2, h + 40);
+    ctx.globalAlpha = 1;
+  }
   if (headPattern && drink.headWash) {
     ctx.fillStyle = drink.headWash;
     ctx.fillRect(-D, level - h - 30, D * 2, h + 40);
@@ -1048,8 +1089,8 @@ function drawHead(level) {
   if (headPattern && drink.headLift) {
     // Lift the photo's grey cast toward lit white foam, brightest at the top.
     const lift = ctx.createLinearGradient(0, level - h, 0, level);
-    lift.addColorStop(0, `rgba(246, 241, 226, ${drink.headLift * 1.6})`);
-    lift.addColorStop(1, `rgba(233, 220, 182, ${drink.headLift * 0.8})`);
+    lift.addColorStop(0, `rgba(248, 240, 220, ${drink.headLift * 1.8})`);
+    lift.addColorStop(1, `rgba(241, 230, 204, ${drink.headLift * 1.2})`);
     ctx.fillStyle = lift;
     ctx.fillRect(-D, level - h - 30, D * 2, h + 40);
   }
@@ -1080,23 +1121,41 @@ function drawHead(level) {
     // Shade toward the liquid, so the head has volume.
     const depth = ctx.createLinearGradient(0, level - h, 0, level + 3);
     depth.addColorStop(0, 'rgba(255, 255, 255, 0)');
-    depth.addColorStop(0.65, 'rgba(120, 80, 30, 0.05)');
-    depth.addColorStop(1, 'rgba(110, 70, 20, 0.16)');
+    depth.addColorStop(0.7, 'rgba(120, 80, 30, 0.04)');
+    depth.addColorStop(1, 'rgba(110, 70, 20, 0.08)');
     ctx.fillStyle = depth;
     ctx.fillRect(-D, level - h - 30, D * 2, h + 40);
   }
   ctx.restore();
 
-  // Feather the head's lower edge so the photo doesn't look cut out.
-  if (headPattern) {
-    const tone = crema ? '200, 147, 90' : drink.foamShade[1].match(/\w\w/g).map(h => parseInt(h, 16)).join(', ');
-    const depth = crema ? 8 : 14;
-    const fb = ctx.createLinearGradient(0, level + 4, 0, level + 6 + depth);
-    fb.addColorStop(0, `rgba(${tone}, 0.75)`);
-    fb.addColorStop(1, `rgba(${tone}, 0)`);
-    ctx.fillStyle = fb;
-    ctx.fillRect(-D, level + 4, D * 2, depth + 2);
+  // Small soft puffs along the top break up the cut-out edge.
+  if (!crema) {
+    for (let x = -D; x <= D; x += 6 + 9 * Math.abs(Math.sin(x * 1.37))) {
+      const r = 1.5 + 3 * Math.abs(Math.sin(x * 0.71 + 0.3));
+      const y = level + foamTop(x) + r * 0.6;
+      const pg = ctx.createRadialGradient(x, y, 0, x, y, r);
+      pg.addColorStop(0, drink.head === 'cream' ? 'rgba(255, 253, 246, 0.8)' : 'rgba(250, 244, 228, 0.7)');
+      pg.addColorStop(1, 'rgba(250, 244, 228, 0)');
+      ctx.fillStyle = pg;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    }
   }
+
+  // Fade the bottom: opaque down to the surface, gone `reach` px into the liquid.
+  ctx.globalCompositeOperation = 'destination-in';
+  const top = level - h - 80, bottom = level + reach;
+  const fade = ctx.createLinearGradient(0, top, 0, bottom);
+  fade.addColorStop(0, 'rgba(0, 0, 0, 1)');
+  fade.addColorStop(Math.max(0, (level - 4 - top) / (bottom - top)), 'rgba(0, 0, 0, 1)');
+  fade.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = fade;
+  ctx.fillRect(-D, top, D * 2, bottom - top);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx = main;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(headLayer, 0, 0);
+  ctx.restore();
   if (crema) {
     // Wet specular line on top, and tiny bubbles where it meets the glass.
     ctx.beginPath();
@@ -1115,8 +1174,8 @@ function drawHead(level) {
     // Soft light along the top.
     ctx.beginPath();
     for (let x = -D; x <= D; x += 4) ctx.lineTo(x, level + foamTop(x) + 1.2);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = drink.head === 'cream' ? 1 : 1.5;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+    ctx.lineWidth = 1;
     ctx.stroke();
   }
 }
@@ -1129,17 +1188,20 @@ function drawMeniscus(level) {
   for (let x = D; x >= -D; x -= 4) ctx.lineTo(x, surfaceAt(level, x) + 9);
   ctx.closePath();
   const ribbon = ctx.createLinearGradient(0, level - 5, 0, level + 9);
-  ribbon.addColorStop(0, 'rgba(200, 50, 84, 0.55)');
-  ribbon.addColorStop(0.35, 'rgba(158, 26, 58, 0.3)');
+  ribbon.addColorStop(0, 'rgba(200, 29, 66, 0.85)');
+  ribbon.addColorStop(0.3, 'rgba(18, 1, 5, 0.7)');
+  ribbon.addColorStop(0.55, 'rgba(158, 26, 58, 0.25)');
   ribbon.addColorStop(1, 'rgba(74, 8, 25, 0)');
   ctx.fillStyle = ribbon;
   ctx.fill();
 
   ctx.beginPath();
   for (let x = -D; x <= D; x += 4) ctx.lineTo(x, surfaceAt(level, x) + 0.5);
-  ctx.strokeStyle = 'rgba(255, 176, 192, 0.35)';
-  ctx.lineWidth = 1;
+  ctx.setLineDash([90, 30, 40, 70, 140, 40]);
+  ctx.strokeStyle = 'rgba(255, 230, 236, 0.6)';
+  ctx.lineWidth = 1.2;
   ctx.stroke();
+  ctx.setLineDash([]);
 
   const left = Math.max(-D, surfL), right = Math.min(D, surfR);
   const span = right - left;
@@ -1162,6 +1224,12 @@ function drawMeniscus(level) {
 // puffs that widen and fade as they go.
 function drawSteam(level) {
   const top = level - foamHeight();
+  // A faint mist hanging just over the hot surface.
+  const mist = ctx.createLinearGradient(0, top, 0, top - 40);
+  mist.addColorStop(0, 'rgba(255, 255, 255, 0.06)');
+  mist.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = mist;
+  ctx.fillRect(-D, top - 40, D * 2, 40);
   for (let i = 0; i < 3; i++) {
     const life = (clock / 5 + i * 0.33) % 1;
     const fade = Math.sin(life * Math.PI);
@@ -1171,8 +1239,8 @@ function drawSteam(level) {
       const t = k / height;
       const x = x0 + Math.sin(k * 0.03 - clock * 1.1 + i * 2) * (3 + k * 0.14);
       const y = top - 4 - k;
-      const r = 3 + t * 14;
-      const a = 0.09 * fade * (1 - t) * Math.min(1, t * 5);
+      const r = 12 + t * 34;
+      const a = 0.05 * fade * (1 - t) * Math.min(1, t * 4);
       const pg = ctx.createRadialGradient(x, y, 0, x, y, r);
       pg.addColorStop(0, `rgba(250, 246, 240, ${a})`);
       pg.addColorStop(1, 'rgba(250, 246, 240, 0)');
@@ -1383,6 +1451,7 @@ async function start() {
 // Photo textures for this drink. Until they load, the drawn gradients show.
 function loadTextures() {
   const want = { body: `${drinkName}-body` };
+  if (drink.photoAlpha === 0) delete want.body;
   if (drink.head !== 'none') want.head = `${drinkName}-head`;
   if (drink.drops) want.condensation = 'condensation';
   for (const [key, file] of Object.entries(want)) {
@@ -1432,10 +1501,10 @@ function seamless(img, axis) {
 }
 
 // Draw an image to cover the portrait screen, in screen coordinates.
-function drawCover(img) {
+function drawCover(img, alignX = 0.5) {
   const k = Math.max(PW / img.width, PH / img.height);
   const w = img.width * k, h = img.height * k;
-  ctx.drawImage(img, (PW - w) / 2, (PH - h) / 2, w, h);
+  ctx.drawImage(img, (PW - w) * alignX, (PH - h) / 2, w, h);
 }
 
 function countKey() {
