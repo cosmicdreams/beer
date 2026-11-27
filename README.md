@@ -4,6 +4,11 @@ Idea from Nolan: the whole phone screen is a glass of beer. Tip the phone to
 your lips like a pint and the beer stays level, sloshes, and drains out over
 the top edge into your mouth.
 
+Drinks: beer, butterbeer, root beer, wine and coffee. Pick one on the start
+screen, or open `?drink=wine` (`beer`, `butterbeer`, `rootbeer`, `wine`,
+`coffee`). The choice and a separate count per drink are kept in
+`localStorage`.
+
 ## Core loop
 
 1. Tap **Pour one**; beer pours in from the top and the head settles.
@@ -35,10 +40,18 @@ motion permission when you tap **Pour one**.
   The level is solved so the beer keeps its volume; whatever no longer fits
   below the top edge's lower corner drains, capped at 24% of the screen per
   second.
-- Foam, rising bubbles, lacing left on the glass as the level drops, and
-  condensation on the glass are all drawn on a 2D canvas, no images.
+- Each drink is a photo texture in `textures/` (liquid body, head, and a
+  condensation layer for cold drinks), generated with OpenAI gpt-image-2.
+  Wine has no body photo; it is painted. The photos are kept alive in code:
+  the liquid photo lives in the liquid's frame and scrolls so bubbles rise
+  against gravity, swirls drift, light wanders through still drinks, the
+  liquid and head slide with the slosh, foam bubbles pop, and condensation
+  drops run down. The head is drawn offscreen and faded into the liquid.
+- Drawn on top in code: the tilt and slosh, rising bubble trails, lacing,
+  wine legs that form after a swirl, steam, the pour, and glass highlights.
+  Until the photos load, gradients stand in.
 - Glug sounds (Web Audio), a fizz while pouring, vibration (Android only), and
-  a burp when the glass empties. The beer count is kept in `localStorage`.
+  a burp when the glass empties (the carbonated drinks only).
 
 Desktop: a slider replaces the sensor. `?tilt=50` sets the angle in degrees,
 `?beer=0.4` how full it is, and `?pour` starts a refill.
