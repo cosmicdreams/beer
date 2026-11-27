@@ -104,8 +104,8 @@ html, body {
 }
 #start h1 {
   margin: 0;
-  font-size: clamp(44px, 15vw, 84px);
-  letter-spacing: 0.1em;
+  font-size: clamp(36px, 11vw, 84px);
+  letter-spacing: 0.06em;
   color: #fff8e8;
   text-shadow: 0 3px 18px rgba(60, 25, 0, 0.8);
 }
