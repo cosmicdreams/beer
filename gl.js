@@ -71,6 +71,7 @@ uniform float uHasFloat;
 uniform float uSeamFizz;    // fine bright bubbles packed under a beer head
 uniform float uCondAbove;   // condensation strength on the dry glass above the drink
 uniform vec2 uCreamAt;      // liquid-frame x and width where cream melts from (float)
+uniform vec2 uCreamFrom;    // creamer: liquid-frame x it went in at, seconds since
 uniform float uRipple;
 uniform float uCremaGloss;
 uniform sampler2D uBubbles;  // bubbles, drawn first into their own layer
@@ -178,6 +179,16 @@ void main() {
       dens += smoothstep(0.5, 0.8, fbm(q * 2.6 + 2.0 * warp + 5.0)) * 0.25 * uCream * exp(-max(0.0, depth) / 400.0);
       dens *= mix(1.0, exp(-max(0.0, depth) / 320.0), 0.6);
       if (uCreamTop > 0.5) dens *= exp(-max(0.0, depth) / 170.0) * exp(-pow((w.x - uCreamAt.x) / uCreamAt.y, 2.0));
+      else {
+        // Creamer plunges in where it is poured, then billows out and spreads.
+        float age = uCreamFrom.y;
+        float plunge = min(uP.y, 60.0 + age * 140.0);
+        float spread = 25.0 + age * 55.0;
+        float dx = (w.x - uCreamFrom.x) / spread;
+        float dy = max(0.0, depth - plunge) / (spread * 1.4);
+        float reach = exp(-dx * dx - dy * dy) * smoothstep(-20.0, 10.0, plunge - depth + 40.0);
+        dens *= mix(reach * 1.6, 1.0, smoothstep(5.0, 16.0, age));
+      }
       vec3 cream = uCreamCol * (0.75 + 0.25 * thick);
       liq = mix(liq, cream, clamp(dens, 0.0, 0.85));
       liq = mix(liq, uCreamCol * 0.8, uCream * 0.18 * (uCreamTop > 0.5 ? exp(-max(0.0, depth) / 200.0) : 1.0));
@@ -520,6 +531,7 @@ void main() {
     f1('uSeamFizz', L.seamFizz || 0);
     f1('uCondAbove', s.condAbove);
     v2('uCreamAt', s.creamAt[0], s.creamAt[1]);
+    v2('uCreamFrom', s.creamFrom[0], s.creamFrom[1]);
     f1('uRipple', L.ripple);
     f1('uCremaGloss', L.cremaGloss || 0);
     v3('uWallGlow', L.wallGlow || [0, 0, 0]);

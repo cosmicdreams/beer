@@ -189,6 +189,15 @@ let foamShift = 0;      // how far the head has slid sideways with the slosh
 let liquidShift = 0;    // the same for the liquid photo
 let pops = [];
 let creamAmt = 0;       // how much creamer has poured in, 0 to 1
+// Extras arriving: floaters fall in and bob, creamer and cold foam pour.
+const floatState = {};  // per floater id: { fy, fv, landed }
+let drops = [];         // splash droplets, liquid frame
+let addPour = null;     // { kind: 'cream' | 'foam', t, x }
+let creamAge = 99;      // seconds since creamer started pouring
+let creamOrigin = 0;    // liquid-frame x where it went in
+let foamGrow = 1;       // cold foam builds up as it is poured
+let pendingExtras = [];
+let lastLevel = 0; // extras to add once a fresh pour finishes
 let legs = [];
 let legTimer = 0;
 let lastTopY = null;     // screen y of the wine's highest wet point, to spot it falling
@@ -583,7 +592,7 @@ function surfaceFor(poly, area) {
 }
 
 function foamHeight() {
-  return PH * (FOAM * Math.min(1, beer / 0.1) + foamExtra);
+  return PH * (FOAM * Math.min(1, beer / 0.1) * (drink.head === 'cream' && drinkName === 'coffee' ? foamGrow : 1) + foamExtra);
 }
 
 // Surface ripple, in the liquid frame.
@@ -671,8 +680,12 @@ function update(dt) {
   shake *= Math.exp(-dt * 3);
   // Shaking a fizzy drink foams it up.
   if (shake > 0.15 && drink.fizz > 0 && FOAM > 0.03 && beer > 0.05) foamExtra = Math.min(0.2, foamExtra + shake * dt * 0.25);
-  const creamTarget = drink.gl && drink.gl.cream ? (drink.gl.creamMax || 1) : 0;
-  creamAmt += (creamTarget - creamAmt) * Math.min(1, dt * (creamTarget ? 0.35 : 2));
+  const creamMax = drink.gl && drink.gl.cream ? (drink.gl.creamMax || 1) : 0;
+  if (!creamMax) creamAmt = Math.max(0, creamAmt - dt * 2);
+  else if (drink.float) creamAmt = Math.min(creamMax, creamAmt + dt * 0.04);   // ice cream melts slowly
+  else if (addPour && addPour.kind === 'cream') creamAmt = Math.min(creamMax, creamAmt + dt * 0.45);
+  creamAge += dt;
+  updateExtras(dt);
 
   const poly = [[0, 0], [PW, 0], [PW, PH], [0, PH]].map(([x, y]) => toWorld(x, y));
   const total = PW * PH;
@@ -681,12 +694,15 @@ function update(dt) {
   const fits = polygonArea(clipBelow(poly, rim)) / total;
 
   let sip = 0;
+  if (fizz && fizz.drips && audio && Math.random() < dt * 9) blip(800 + Math.random() * 900, 1400 + Math.random() * 900, 0.05, 0.04);
   if (state === 'refilling') {
     beer = Math.min(FULL, beer + REFILL_RATE * dt);
     foamExtra = Math.min(drink.fresh, foamExtra + 0.22 * dt);
     if (beer >= FULL) {
       state = 'full';
       stopFizz();
+      for (const id of pendingExtras) addExtra(id);
+      pendingExtras = [];
     }
   } else if (beer > 0) {
     sip = Math.max(0, Math.min(beer - fits, DRINK_RATE * dt));
@@ -721,16 +737,144 @@ function update(dt) {
   const wet = clipBelow(poly, level).filter(p => Math.abs(p.y - level) < 0.5).map(p => p.x);
   surfL = wet.length ? Math.min(...wet) : -1e4;
   surfR = wet.length ? Math.max(...wet) : 1e4;
+  lastLevel = level;
   updateBubbles(dt, level);
   updateLace(dt, level, sip > 0);
   updateAlive(dt, level);
   return level;
 }
 
+// ---------- extras arriving ----------
+
+// Called when an extra is added to the glass (or after a fresh pour).
+function addExtra(id) {
+  if (id === 'ice') {
+    [0, 1, 2].forEach(i => { floatState[`ice${i}`] = { fy: -PH * (0.7 + 0.12 * i), fv: 0, landed: false, delay: i * 0.22 }; });
+  } else if (id === 'lemon') {
+    floatState.lemon = { fy: -PH * 0.55, fv: 0, landed: false, delay: 0.1 };
+  } else if (id === 'float') {
+    floatState.scoop = { fy: -PH * 0.6, fv: 0, landed: false, delay: 0 };
+  } else if (id === 'creamer') {
+    addPour = { kind: 'cream', t: 0, x: PW * (0.3 + Math.random() * 0.15) };
+    creamAge = 0;
+    creamOrigin = toWorld(addPour.x, 0).x;
+    creamAmt = 0;
+    startPourSound('cream');
+  } else if (id === 'coldfoam') {
+    addPour = { kind: 'foam', t: 0, x: PW * 0.5 };
+    foamGrow = 0;
+    startPourSound('foam');
+  }
+}
+
+// Floaters fall under gravity, hit the surface (a wave, a splash, a sound),
+// overshoot under, and bob back up on a buoyancy spring.
+const FLOATER = {
+  ice: { splash: 900, drops: 26, dropSpeed: 300, buoy: 55, damp: 5, keep: 0.35, sound: 'ice' },
+  lemon: { splash: 160, drops: 5, dropSpeed: 110, buoy: 40, damp: 7, keep: 0.15, sound: 'lemon' },
+  scoop: { splash: 420, drops: 10, dropSpeed: 140, buoy: 30, damp: 8, keep: 0.2, sound: 'scoop' },
+};
+function floaterX(id) {
+  if (id === 'lemon') return -PW * 0.3 + liquidShift * 0.6;
+  if (id === 'scoop') return PW * 0.08 + liquidShift * 0.5;
+  const i = Number(id.slice(3));
+  return PW * (0.02 + 0.2 * i) + liquidShift * (0.7 + i * 0.15);
+}
+
+function updateExtras(dt) {
+  for (const [id, f] of Object.entries(floatState)) {
+    if (f.delay > 0) { f.delay -= dt; continue; }
+    const kind = id.startsWith('ice') ? 'ice' : id;
+    const P = FLOATER[kind];
+    if (!f.landed) {
+      f.fv += 1900 * dt;
+      f.fy += f.fv * dt;
+      if (f.fy >= -6) {
+        f.landed = true;
+        splash(floaterX(id), P, f.fv);
+        f.fv *= P.keep;
+      }
+    } else {
+      f.fv += (-P.buoy * f.fy - P.damp * f.fv) * dt;
+      f.fy += f.fv * dt;
+      if (Math.abs(f.fy) < 0.05 && Math.abs(f.fv) < 0.05) delete floatState[id];
+    }
+  }
+  drops = drops.filter(d => {
+    d.vy += 1300 * dt;
+    d.x += d.vx * dt;
+    d.y += d.vy * dt;
+    d.age += dt;
+    return d.y < d.surf + 4 || d.age < 0.05;
+  });
+  if (addPour) {
+    addPour.t += dt;
+    if (addPour.kind === 'foam') foamGrow = Math.min(1, foamGrow + dt * 0.5);
+    if (addPour.t > (addPour.kind === 'cream' ? 2.4 : 2.2)) { addPour = null; stopFizz(); }
+  }
+}
+
+function splash(x, P, speed) {
+  const level = lastLevel;
+  poke(x, P.splash * Math.min(1.5, speed / 900));
+  for (let i = 0; i < P.drops; i++) {
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
+    const v = P.dropSpeed * (0.4 + Math.random() * 0.8);
+    drops.push({ x: x + (Math.random() - 0.5) * 30, y: level - 2, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: 1 + Math.random() * 2, age: 0, surf: level });
+  }
+  // Air dragged under: a burst of bubbles below the entry point.
+  for (let i = 0; i < P.drops; i++) {
+    const p = toScreen(x + (Math.random() - 0.5) * 50, level + 10 + Math.random() * 60);
+    const b = newBubble(p.x, p.y, 0.8 + Math.random() * 1.6);
+    b.v = 10 + Math.random() * 40;
+    bubbles.push(b);
+  }
+  playExtraSound(P.sound, speed);
+}
+
+function drawDrops() {
+  ctx.fillStyle = drink.pour[2];
+  for (const d of drops) {
+    ctx.globalAlpha = 0.75;
+    ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.beginPath(); ctx.arc(d.x - d.r * 0.3, d.y - d.r * 0.3, d.r * 0.35, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = drink.pour[2];
+  }
+  ctx.globalAlpha = 1;
+}
+
+// A thin stream of creamer or cold foam pouring in from the top.
+function drawAddPour(level) {
+  if (!addPour) return;
+  const surface = Math.max(0, toScreen(toWorld(addPour.x, 0).x, level).y - foamHeight());
+  const fade = Math.min(1, addPour.t * 4) * Math.min(1, (2.3 - addPour.t) * 3);
+  if (fade <= 0) return;
+  const x = addPour.x + Math.sin(clock * 9) * 1.2;
+  const w = addPour.kind === 'cream' ? 3.2 : 6;
+  const col = addPour.kind === 'cream' ? '240, 226, 200' : '250, 247, 240';
+  const grad = ctx.createLinearGradient(x - w, 0, x + w, 0);
+  grad.addColorStop(0, `rgba(${col}, 0)`);
+  grad.addColorStop(0.5, `rgba(${col}, ${0.95 * fade})`);
+  grad.addColorStop(1, `rgba(${col}, 0)`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(x - w, 0, w * 2, surface + 3);
+}
+
 function refill() {
   state = 'refilling';
   uprightFor = 0;
   startFizz();
+  // Extras go in after the pour.
+  pendingExtras = activeMods.filter(id => ['ice', 'lemon', 'float', 'creamer', 'coldfoam'].includes(id));
+  for (const k of Object.keys(floatState)) delete floatState[k];
+  for (const id of pendingExtras) {
+    if (id === 'ice') [0, 1, 2].forEach(i => { floatState[`ice${i}`] = { fy: -PH * 2, fv: 0, landed: false, delay: 1e9 }; });
+    if (id === 'lemon') floatState.lemon = { fy: -PH * 2, fv: 0, landed: false, delay: 1e9 };
+    if (id === 'float') floatState.scoop = { fy: -PH * 2, fv: 0, landed: false, delay: 1e9 };
+  }
+  if (pendingExtras.includes('coldfoam')) foamGrow = 0;
+  if (pendingExtras.includes('creamer')) creamAmt = 0;
 }
 
 function inLiquid(x, y, level, margin) {
@@ -1011,7 +1155,7 @@ function drawGL(level) {
   const hasFloat = !!(TEX.lemon || TEX.ice || TEX.scoop) && drawFloatLayer(level);
   if (hasFloat) GLR.updateLayer('float', floatLayer);
   GLR.render({
-    hasFloat, condAbove: 0.08, shear: Math.max(-3, Math.min(3, angleV)),
+    hasFloat, condAbove: 0.08, creamFrom: [creamOrigin, creamAge], shear: Math.max(-3, Math.min(3, angleV)),
     scoop: TEX.scoop ? [PW * 0.08 + liquidShift * 0.5, level - foamH + PW * 0.05, PW * 0.18] : [0, 0, 0], creamAt: [PW * 0.08 + liquidShift * 0.5, 90],
     dpr: Math.min(2, dpr), PW, PH, time: clock, angle, level, fill: beer > 0.002 ? 1 : 0,
     inv: [inv.a, inv.b, 0, inv.c, inv.d, 0, inv.e, inv.f, 1],
@@ -1050,10 +1194,12 @@ function drawGL(level) {
   }
   ctx.globalAlpha = 1;
   if (state === 'refilling') drawPour(level);
+  drawAddPour(level);
   if (beer > 0) {
     ctx.save();
     ctx.translate(PW / 2, PH / 2);
     ctx.rotate(-angle);
+    drawDrops();
     ctx.restore();
   }
   drawSlides();
@@ -1358,23 +1504,25 @@ function drawFloatLayer(level) {
   g.rotate(-angle);
   const surf = x => level + wave(x);
   const slope = x => (wave(x + 8) - wave(x - 8)) / 16;
-  const place = (img, x, sink, size, phase, spin) => {
+  const fyOf = id => (floatState[id] ? floatState[id].fy : 0);
+  const place = (img, x, sink, size, phase, spin, id) => {
     const w = size, h = w * img.height / img.width;
+    const fy = fyOf(id);
     g.save();
-    g.translate(x, surf(x) + h * sink + Math.sin(clock * 1.1 + phase) * 1.5);
+    g.translate(x, surf(x) + h * sink + fy + Math.sin(clock * 1.1 + phase) * 1.5);
     g.rotate(Math.atan(slope(x)) * 0.8 + Math.sin(clock * 0.6 + phase) * spin);
     g.drawImage(img, -w / 2, -h / 2, w, h);
     g.restore();
   };
   iceCubes.forEach((c, i) => {
     const x = PW * (0.02 + 0.2 * i) + liquidShift * (0.7 + i * 0.15) + Math.sin(clock * (0.17 + i * 0.05) + i * 2) * 10;
-    place(c, x, 0.36 + 0.04 * i, PW * (0.24 + 0.03 * (i % 2)), i * 1.7, 0.06 + 0.03 * i);
+    place(c, x, 0.36 + 0.04 * i, PW * (0.24 + 0.03 * (i % 2)), i * 1.7, 0.06 + 0.03 * i, `ice${i}`);
   });
   if (TEX.lemon) {
     const x = -PW * 0.3 + liquidShift * 0.6 + Math.sin(clock * 0.13) * 8;
     const w = PW * 0.38, h = w * 0.42;
     g.save();
-    g.translate(x, surf(x) + h * 0.05 + Math.sin(clock * 1.1 + 3) * 1.5);
+    g.translate(x, surf(x) + h * 0.05 + fyOf('lemon') + Math.sin(clock * 1.1 + 3) * 1.5);
     g.rotate(Math.atan(slope(x)) * 0.8 - 0.12);
     g.drawImage(TEX.lemon, -w / 2, -h / 2, w, h);
     g.restore();
@@ -1383,7 +1531,7 @@ function drawFloatLayer(level) {
     const x = PW * 0.08 + liquidShift * 0.5;
     const s = PW * 0.5;
     g.save();
-    g.translate(x, level - foamHeight() + s * 0.1 + Math.sin(clock * 0.9) * 1.2);
+    g.translate(x, level - foamHeight() + s * 0.1 + fyOf('scoop') + Math.sin(clock * 0.9) * 1.2);
     g.rotate(Math.atan(slope(x)) * 0.5);
     g.drawImage(TEX.scoop, -s / 2, -s / 2, s, s);
     // Its underside is in shadow where it sits in the foam.
@@ -1830,33 +1978,124 @@ function glug() {
   osc.stop(t + 0.16);
 }
 
-function startFizz() {
-  if (!audio || fizz) return;
-  const len = audio.sampleRate;
-  const buf = audio.createBuffer(1, len, audio.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (Math.random() < 0.3 ? 1 : 0.2);
+// Each pour sounds like its drink: a band of rushing liquid, plus fizz
+// crackle for carbonated drinks, a gurgle for still ones, and bright drips
+// for water.
+const POUR_SOUND = {
+  beer: { f: 2000, q: 0.8, g: 0.11, crackle: 0.55, gurgle: 0 },
+  butterbeer: { f: 1500, q: 0.8, g: 0.1, crackle: 0.25, gurgle: 0.2 },
+  rootbeer: { f: 2400, q: 0.7, g: 0.11, crackle: 0.95, gurgle: 0 },
+  wine: { f: 650, q: 1.5, g: 0.1, crackle: 0, gurgle: 0.8 },
+  coffee: { f: 480, q: 1.2, g: 0.09, crackle: 0, gurgle: 0.6 },
+  water: { f: 1250, q: 1.0, g: 0.1, crackle: 0, gurgle: 0.3, drips: true },
+  cream: { f: 900, q: 1.6, g: 0.05, crackle: 0, gurgle: 0.4 },
+  foam: { f: 3200, q: 0.6, g: 0.04, crackle: 0.3, gurgle: 0 },
+};
+let noiseBuf = null;
+function noise() {
+  if (!noiseBuf) {
+    noiseBuf = audio.createBuffer(1, audio.sampleRate * 2, audio.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
   const src = audio.createBufferSource();
-  src.buffer = buf;
+  src.buffer = noiseBuf;
   src.loop = true;
-  const filter = audio.createBiquadFilter();
-  filter.type = 'bandpass';
-  filter.frequency.value = 2400;
-  filter.Q.value = 0.7;
-  const gain = audio.createGain();
-  gain.gain.setValueAtTime(0.0001, audio.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.12, audio.currentTime + 0.3);
-  src.connect(filter).connect(gain).connect(audio.destination);
-  src.start();
-  fizz = { src, gain };
+  return src;
+}
+
+function startFizz() {
+  const prof = { ...POUR_SOUND[drinkName] || POUR_SOUND.beer };
+  if (drink.fizz > 1) prof.crackle = 1;
+  startPourSound(prof);
+}
+
+function startPourSound(kind) {
+  if (!audio) return;
+  stopFizz();
+  const P = typeof kind === 'string' ? POUR_SOUND[kind] : kind;
+  const t = audio.currentTime;
+  const out = audio.createGain();
+  out.gain.setValueAtTime(0.0001, t);
+  out.gain.exponentialRampToValueAtTime(1, t + 0.25);
+  out.connect(audio.destination);
+  const nodes = [];
+  // The rush of liquid.
+  const src = noise();
+  const band = audio.createBiquadFilter();
+  band.type = 'bandpass'; band.frequency.value = P.f; band.Q.value = P.q;
+  const g = audio.createGain(); g.gain.value = P.g;
+  src.connect(band).connect(g).connect(out);
+  src.start(); nodes.push(src);
+  // A gurgle: the rush swells and dips a few times a second.
+  if (P.gurgle) {
+    const lfo = audio.createOscillator(); lfo.frequency.value = 5 + Math.random() * 3;
+    const depth = audio.createGain(); depth.gain.value = P.g * P.gurgle * 0.8;
+    lfo.connect(depth).connect(g.gain);
+    lfo.start(); nodes.push(lfo);
+  }
+  // Fizz: sparse clicks, high-passed.
+  if (P.crackle) {
+    const len = audio.sampleRate;
+    const buf = audio.createBuffer(1, len, audio.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() < 0.004 * P.crackle ? (Math.random() * 2 - 1) : 0;
+    const c = audio.createBufferSource(); c.buffer = buf; c.loop = true;
+    const hp = audio.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3500;
+    const cg = audio.createGain(); cg.gain.value = 0.25 * P.crackle;
+    c.connect(hp).connect(cg).connect(out);
+    c.start(); nodes.push(c);
+  }
+  fizz = { out, nodes, drips: !!P.drips };
 }
 
 function stopFizz() {
-  if (!fizz) return;
+  if (!fizz || !audio) { fizz = null; return; }
   const t = audio.currentTime;
-  fizz.gain.gain.setTargetAtTime(0.0001, t, 0.5);
-  fizz.src.stop(t + 2.5);
+  fizz.out.gain.setTargetAtTime(0.0001, t, 0.35);
+  for (const n of fizz.nodes) n.stop(t + 2);
   fizz = null;
+}
+
+// Short sounds for extras landing in the glass.
+function blip(f0, f1, dur, gain, type = 'sine', when = 0) {
+  const t = audio.currentTime + when;
+  const o = audio.createOscillator(); o.type = type;
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  const g = audio.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(audio.destination);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function splashNoise(f, dur, gain) {
+  const t = audio.currentTime;
+  const s = noise();
+  const b = audio.createBiquadFilter(); b.type = 'bandpass'; b.frequency.value = f; b.Q.value = 0.9;
+  const g = audio.createGain();
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(b).connect(g).connect(audio.destination);
+  s.start(t); s.stop(t + dur + 0.05);
+}
+function playExtraSound(kind, speed) {
+  if (navigator.vibrate) navigator.vibrate(kind === 'ice' ? 30 : 10);
+  if (!audio) return;
+  const k = Math.min(1.3, speed / 900);
+  if (kind === 'ice') {
+    // A hard plunge, a splash, and ice clinking against ice and glass.
+    blip(220, 70, 0.18, 0.35 * k);
+    splashNoise(1600, 0.35, 0.22 * k);
+    for (let i = 0; i < 3; i++) blip(2600 + Math.random() * 1600, 2400 + Math.random() * 1200, 0.12, 0.06, 'sine', 0.08 + i * 0.09 + Math.random() * 0.05);
+  } else if (kind === 'lemon') {
+    blip(420, 260, 0.09, 0.08 * k);
+    splashNoise(2200, 0.12, 0.04 * k);
+  } else if (kind === 'scoop') {
+    blip(160, 60, 0.22, 0.3 * k);
+    splashNoise(900, 0.25, 0.1 * k);
+  }
 }
 
 function burp() {
@@ -2145,6 +2384,8 @@ function setupPicker() {
 // extras keeps the glass as it is (creamer pours in, ice drops in).
 function switchDrink(name, mods) {
   const fresh = name !== drinkName;
+  const added = fresh ? [] : mods.filter(id => !activeMods.includes(id));
+  const removed = fresh ? [] : activeMods.filter(id => !mods.includes(id));
   drinkName = name;
   activeMods = mods;
   drink = composeDrink(name, mods);
@@ -2174,6 +2415,15 @@ function switchDrink(name, mods) {
     if (!startEl.hidden) beer = FULL; else refill();
   } else if (drink.fizz <= 0) {
     bubbles = [];
+  }
+  if (!fresh) {
+    for (const id of removed) {
+      if (id === 'ice') [0, 1, 2].forEach(i => delete floatState[`ice${i}`]);
+      if (id === 'lemon') delete floatState.lemon;
+      if (id === 'float') delete floatState.scoop;
+    }
+    if (beer > 0.05 && state !== 'refilling') for (const id of added) addExtra(id);
+    else pendingExtras.push(...added);
   }
   setupPicker();
 }
