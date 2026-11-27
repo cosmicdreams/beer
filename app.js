@@ -2173,7 +2173,6 @@ function drawHud() {
   let text = '';
   if (!startEl.hidden) text = '';
   else if (state === 'empty') text = 'Cheers! Hold it upright for another';
-  else if (state === 'full' && !drankOnce) text = 'Tip it to your lips';
   if (messageEl.textContent !== text) messageEl.textContent = text;
   const showActions = startEl.hidden && actionsEl.childElementCount > 0;
   if (actionsEl.hidden === showActions) actionsEl.hidden = !showActions;
