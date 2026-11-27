@@ -66,6 +66,13 @@ uniform float uHeadLift;
 uniform float uFoamShift;
 uniform float uTendrils;
 uniform int uSteam;
+uniform sampler2D uFloat;   // floaters (ice, lemon, ice cream), drawn by app.js
+uniform float uHasFloat;
+uniform float uSeamFizz;    // fine bright bubbles packed under a beer head
+uniform float uCondAbove;   // condensation strength on the dry glass above the drink
+uniform vec2 uCreamAt;      // liquid-frame x and width where cream melts from (float)
+uniform float uRipple;
+uniform float uCremaGloss;
 
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec2 p) {
@@ -100,7 +107,7 @@ float waveAt(float x) {
   int j = min(i + 1, ${WAVES - 1});
   float a = 0.0, b = 0.0;
   for (int k = 0; k < ${WAVES}; k++) { if (k == i) a = uWaves[k]; if (k == j) b = uWaves[k]; }
-  return mix(a, b, fract(f)) + 0.35 * sin(x * 0.11 + uT * 3.1) + 0.25 * sin(x * 0.23 - uT * 4.3);
+  return mix(a, b, fract(f)) + uRipple * (sin(x * 0.11 + uT * 3.1) + 0.7 * sin(x * 0.23 - uT * 4.3));
 }
 float surfaceAt(float x) {
   float curl = uHead == 0 ? 6.0 * (exp(-max(0.0, x - uWet.x) / 14.0) + exp(-max(0.0, uWet.y - x) / 14.0)) : 0.0;
@@ -139,9 +146,9 @@ void main() {
     liq += uScatter * (1.0 - exp(-thick * 1.6));
 
     if (uBodyMix > 0.0) {
-      vec2 buv = p / uP;
+      vec2 buv = vec2(w.x / uP.x + 0.5, w.y / uP.y + 0.5);
       vec2 flow = vec2(fbm(buv * 3.0 + vec2(0.0, t * 0.04)), fbm(buv * 3.0 + vec2(5.2, -t * 0.035))) - 0.5;
-      buv += uFlow * flow + vec2(uShift / uP.x, 0.0);
+      buv += uFlow * flow + vec2(uShift / uP.x, t * 0.004);
       vec3 ph = texture(uBody, buv).rgb * uBodyGain;
       vec3 phLit = ph * (0.62 + 0.38 * thick) + (1.0 - thick) * 0.25 * uBack * exp(-uSigma * 0.3);
       liq = mix(liq, phLit, uBodyMix);
@@ -149,30 +156,40 @@ void main() {
 
     // Cream: clouds that billow, curl and slowly blend in.
     if (uCream > 0.0) {
-      vec2 q = w * 0.005;
-      q.y -= t * 0.018;
-      vec2 warp = vec2(fbm(q * 2.0 + t * 0.03), fbm(q * 2.0 - t * 0.025 + 3.7));
-      float dens = fbm(q + 1.8 * warp);
-      float lo = 0.62 - 0.32 * uCream;
-      dens = smoothstep(lo, lo + 0.28, dens) * uCream;
-      if (uCreamTop > 0.5) dens *= exp(-max(0.0, depth) / 140.0);
-      vec3 cream = uCreamCol * (0.72 + 0.28 * thick) + 0.08;
-      liq = mix(liq, cream, clamp(dens, 0.0, 0.92));
+      vec2 q = uCreamTop > 0.5 ? vec2(w.x * 0.011, w.y * 0.0035) : w * 0.0032;
+      q.y -= t * 0.02;
+      vec2 warp = vec2(fbm(q * 1.6 + t * 0.025), fbm(q * 1.6 - t * 0.02 + 3.7));
+      float dens = fbm(q + 1.6 * warp);
+      float lo = 0.6 - 0.3 * uCream;
+      dens = smoothstep(lo, lo + 0.45, dens) * uCream;
+      dens *= mix(1.0, exp(-max(0.0, depth) / 320.0), 0.6);
+      if (uCreamTop > 0.5) dens *= exp(-max(0.0, depth) / 170.0) * exp(-pow((w.x - uCreamAt.x) / uCreamAt.y, 2.0));
+      vec3 cream = uCreamCol * (0.75 + 0.25 * thick);
+      liq = mix(liq, cream, clamp(dens, 0.0, 0.85));
       liq = mix(liq, uCreamCol * 0.8, uCream * 0.18 * (uCreamTop > 0.5 ? exp(-max(0.0, depth) / 200.0) : 1.0));
     }
 
     // Caustics, brightest just under the surface.
-    float cs = caustic(w * 0.0035 + vec2(uShift * 0.002, 0.0), t * 0.55);
-    liq += uCaustic * cs * smoothstep(0.0, 40.0, depth) * exp(-max(0.0, depth) / 520.0) * (0.35 + 0.65 * thick);
+    float cs = caustic(w * 0.007 + vec2(uShift * 0.003, 0.0), t * 0.5);
+    liq += uCaustic * 0.6 * cs * smoothstep(0.0, 30.0, depth) * exp(-max(0.0, depth) / 260.0) * (0.35 + 0.65 * thick);
 
     // Glow under the surface for dark drinks, and gentle loss of light with depth.
     liq += uSurfGlow * exp(-max(0.0, depth) / max(1.0, uSurfGlowDepth));
     liq *= 1.0 - 0.22 * smoothstep(0.0, uP.y, depth);
 
+    // A band of fine bright bubbles packed under a beer head.
+    if (uSeamFizz > 0.0 && uHead == 1) {
+      vec2 cell = floor(vec2(w.x + uFoamShift * 0.3, depth) / 3.0);
+      vec2 f = fract(vec2(w.x + uFoamShift * 0.3, depth) / 3.0) - 0.5;
+      float r = 0.18 + 0.22 * hash(cell);
+      float dot1 = (1.0 - smoothstep(r - 0.12, r, length(f))) * step(0.35, hash(cell + 9.0));
+      liq = mix(liq, vec3(1.0, 0.97, 0.88), dot1 * uSeamFizz * exp(-max(0.0, depth) / 9.0) * 0.85);
+    }
+
     // Cream tendrils sinking from a creamy head.
     if (uTendrils > 0.0 && uHead > 0) {
-      float td = fbm(vec2(w.x * 0.035 + uFoamShift * 0.01, depth * 0.012 - t * 0.06));
-      float m = smoothstep(0.55, 0.8, td) * exp(-max(0.0, depth) / 70.0) * uTendrils;
+      float td = fbm(vec2(w.x * 0.11 + uFoamShift * 0.01 + sin(depth * 0.02 + t * 0.3), depth * 0.01 - t * 0.05));
+      float m = smoothstep(0.58, 0.85, td) * exp(-max(0.0, depth) / 55.0) * uTendrils * 0.8;
       liq = mix(liq, uHeadBot, m);
     }
 
@@ -181,7 +198,7 @@ void main() {
     if (uHead == 0) {
       float lip = 1.0 - smoothstep(0.0, 3.0, depth);
       float dark = smoothstep(2.0, 4.5, depth) * (1.0 - smoothstep(5.0, 12.0, depth));
-      liq = mix(liq, uMenLip, lip * 0.7);
+      liq = mix(liq, uMenLip, lip * 0.55);
       liq = mix(liq, uMenDark, dark * (uClear > 0.5 ? 0.25 : 0.55));
       float gl = (1.0 - smoothstep(0.0, 1.4, abs(depth - 0.6))) * (0.4 + 0.6 * noise(vec2(w.x * 0.02 + t * 0.4, 0.0)));
       liq += uMenGlint * gl * 0.6;
@@ -189,6 +206,24 @@ void main() {
 
     float edge = smoothstep(-2.0, 0.8, depth);
     col = mix(col, liq, edge);
+  }
+
+  // Floaters: dry above the surface; below it, seen through the liquid -
+  // shifted, tinted by absorption and dimmed.
+  if (uHasFloat > 0.5) {
+    vec2 fuv = p / uP;
+    vec4 fl;
+    if (wet && depth > 0.0) {
+      vec2 off = vec2(-u * 4.0, -3.0) + 3.0 * vec2(noise(p * 0.05 + t), noise(p * 0.05 - t)) - 1.5;
+      fl = texture(uFloat, (p + off) / uP);
+      fl.rgb *= exp(-uSigma * 0.35) * 0.82;
+      fl.rgb = mix(fl.rgb, fl.rgb * 0.9 + 0.1 * uBack, 0.3);
+    } else {
+      fl = texture(uFloat, fuv);
+    }
+    // Contact: a thin bright line where a floater crosses the surface.
+    if (wet && abs(depth) < 1.2) fl.rgb += 0.15 * fl.a;
+    col = mix(col, fl.rgb, fl.a);
   }
 
   // The head: foam, cream or crema, sampled from its photo through moving
@@ -208,9 +243,12 @@ void main() {
       h *= 0.82 + 0.18 * (1.0 - hv);
       h *= 0.86 + 0.14 * thick;
       // Bubbles in the head pop: cells blink out and back.
-      vec2 cell = floor(vec2(w.x, w.y - top) / 3.0);
+      vec2 hp = vec2(w.x + uFoamShift, w.y - top) / 4.0;
+      vec2 cell = floor(hp);
       float life = fract(hash(cell) * 7.0 + t * (0.15 + hash(cell + 3.0) * 0.4));
-      h += vec3(0.08) * smoothstep(0.96, 1.0, life) * (1.0 - hv);
+      float round1 = 1.0 - smoothstep(0.15, 0.4, length(fract(hp) - 0.5));
+      h += vec3(0.07) * smoothstep(0.94, 1.0, life) * round1 * (1.0 - hv);
+      if (uCremaGloss > 0.0) h += vec3(1.0, 0.92, 0.8) * uCremaGloss * (1.0 - smoothstep(0.0, 1.6, w.y - top));
       float a = smoothstep(top - 1.0, top + 1.2, w.y) * (1.0 - smoothstep(surf - 2.0, surf + reach, w.y));
       col = mix(col, h, a);
     }
@@ -224,8 +262,8 @@ void main() {
       vec2 q = vec2(w.x * 0.01, w.y * 0.008 + t * 0.12);
       vec2 warp = vec2(fbm(q * 1.5 + t * 0.05), fbm(q * 1.5 - t * 0.04 + 2.0));
       float s = fbm(q + 1.4 * warp);
-      float dens = smoothstep(0.5, 0.85, s) * exp(-above / 170.0) * smoothstep(0.0, 25.0, above);
-      col = mix(col, vec3(0.94, 0.93, 0.91), dens * 0.35);
+      float dens = smoothstep(0.42, 0.92, s) * exp(-above / 170.0) * smoothstep(0.0, 25.0, above);
+      col = mix(col, vec3(0.95, 0.94, 0.92), dens * 0.24);
     }
   }
 
@@ -236,7 +274,7 @@ void main() {
   col = mix(col, refl, 0.1 * pow(abs(u), 3.0));
   float xn = p.x / uP.x;
   float vfade = smoothstep(0.0, 0.2, p.y / uP.y) * smoothstep(1.0, 0.75, p.y / uP.y);
-  float h1 = exp(-pow((xn - (0.045 + 0.012 * sin(uGrav))) / 0.004, 2.0)) * 0.13;
+  float h1 = exp(-pow((xn - (0.045 + 0.012 * sin(uGrav))) / 0.014, 2.0)) * 0.07;
   float h2 = exp(-pow((xn - (0.86 + 0.03 * sin(uGrav))) / 0.045, 2.0)) * 0.07;
   col += vec3(h1 + h2) * (0.4 + 0.6 * vfade);
 
@@ -247,7 +285,8 @@ void main() {
     float aspect = (uP.x / uP.y) / (768.0 / 1152.0);
     cuv.x = (cuv.x - 0.5) * aspect + 0.5 + (uCondMap.z - 0.5) * (1.0 - aspect);
     vec3 m = texture(uCond, cuv).rgb;
-    col = 1.0 - (1.0 - col) * (1.0 - m * uCondAmt);
+    float where = wet ? mix(uCondAbove, 1.0, smoothstep(-14.0, 14.0, depth)) : uCondAbove;
+    col = 1.0 - (1.0 - col) * (1.0 - m * uCondAmt * where);
   }
 
   float vig = smoothstep(1.25, 0.35, length((p / uP - 0.5) * vec2(1.0, 0.8)));
@@ -282,9 +321,9 @@ void main() {
   float dark = smoothstep(0.45, 0.75, r) * (1.0 - smoothstep(0.82, 0.95, r));
   float spec = 1.0 - smoothstep(0.0, 0.22, length(vLocal - vec2(-0.35, -0.38)));
   float crescent = smoothstep(0.55, 0.7, r) * (1.0 - smoothstep(0.78, 0.9, r)) * smoothstep(0.0, 0.6, vLocal.y);
-  vec3 c = uTint * (0.35 + rim * 0.9) + vec3(1.0) * spec * 0.9 + uTint * crescent * 0.5;
-  float a = clamp(0.18 + rim * 0.75 + spec * 0.9 + dark * 0.25, 0.0, 1.0);
-  c = mix(c, vec3(0.08, 0.04, 0.0), dark * 0.45);
+  vec3 c = uTint * (0.45 + rim * 0.45) + vec3(1.0) * spec + uTint * crescent * 0.4;
+  float a = clamp(0.22 + rim * 0.45 + spec * 0.95 + dark * 0.12, 0.0, 1.0);
+  c = mix(c, vec3(0.08, 0.04, 0.0), dark * 0.15);
   outColor = vec4(c * a, a);
 }`;
 
@@ -323,7 +362,7 @@ void main() {
     for (const n of names(FRAG)) loc[n] = gl.getUniformLocation(prog, n);
     for (const n of names(BVERT + BFRAG)) bloc[n] = gl.getUniformLocation(bubbleProg, n);
     // Placeholders until the real textures arrive.
-    for (const k of ['room', 'cond', 'body', 'head']) setTexture(k, null);
+    for (const k of ['room', 'cond', 'body', 'head', 'float']) setTexture(k, null);
     return true;
   }
 
@@ -344,6 +383,19 @@ void main() {
     const wrap = key === 'room' ? gl.CLAMP_TO_EDGE : gl.REPEAT;
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
+  }
+
+  // Per-frame upload for the floater layer: no mipmaps.
+  function updateLayer(key, source) {
+    if (!gl) return;
+    if (!tex[key]) tex[key] = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex[key]);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   }
 
   function resize(width, height) {
@@ -407,6 +459,12 @@ void main() {
     f1('uFoamShift', s.foamShift);
     f1('uTendrils', L.tendrils);
     i1('uSteam', L.steam ? 1 : 0);
+    f1('uHasFloat', s.hasFloat ? 1 : 0);
+    f1('uSeamFizz', L.seamFizz || 0);
+    f1('uCondAbove', s.condAbove);
+    v2('uCreamAt', s.creamAt[0], s.creamAt[1]);
+    f1('uRipple', L.ripple);
+    f1('uCremaGloss', L.cremaGloss || 0);
 
     const bind = (unit, key, name) => {
       gl.activeTexture(gl.TEXTURE0 + unit);
@@ -417,6 +475,7 @@ void main() {
     bind(1, 'cond', 'uCond');
     bind(2, 'body', 'uBody');
     bind(3, 'head', 'uHeadTex');
+    bind(4, 'float', 'uFloat');
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     // Bubbles on top, blended.
@@ -446,5 +505,5 @@ void main() {
     }
   }
 
-  return { init, setTexture, resize, render, rgb, WAVES, get ok() { return !!gl; } };
+  return { init, setTexture, updateLayer, resize, render, rgb, WAVES, get ok() { return !!gl; } };
 })();

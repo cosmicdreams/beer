@@ -31,7 +31,7 @@ const params = new URLSearchParams(location.search);
 // foam cell tint), fizz, condensation, steam, and whether it earns a burp.
 const DRINKS = {
   beer: {
-    gl: { sigma: [0.15, 0.62, 2.3], back: [1.05, 0.88, 0.55], scatter: [0.05, 0.03, 0.0], bodyMix: 0.5, bodyGain: [1.05, 1.0, 0.92], flow: 0.012, caustic: [0.1, 0.08, 0.025], surfGlow: [0.12, 0.08, 0.0], surfGlowDepth: 40, tendrils: 0 },
+    gl: { seamFizz: 1, ripple: 0.12, sigma: [0.16, 0.62, 2.1], back: [0.95, 0.78, 0.47], scatter: [0.05, 0.03, 0.0], bodyMix: 0.5, bodyGain: [0.98, 0.92, 0.82], flow: 0.012, caustic: [0.1, 0.08, 0.025], surfGlow: [0.12, 0.08, 0.0], surfGlowDepth: 40, tendrils: 0 },
     title: 'BEER', unit: ['beer', 'beers'], head: 'foam',
     body: ['#f9c53a', '#eea31c', '#cc760c', '#7a3a05'],
     glow: 'rgba(255, 224, 102, 0.42)', glowAt: 'center', band: '255, 215, 90', bandAlpha: 0.35,
@@ -40,7 +40,7 @@ const DRINKS = {
     headScale: 0.3, headLift: 0.22, rise: [0, 0], photoHaze: 'rgba(255, 210, 80, 0.2)', seam: '232, 184, 74', fresh: 0.11, fizz: 1, drops: 1, burp: true, pour: ['#c06a0e', '#f4b52a', '#ffe08a'],
   },
   butterbeer: {
-    gl: { sigma: [0.3, 0.95, 2.4], back: [1.0, 0.84, 0.52], scatter: [0.34, 0.22, 0.08], bodyMix: 0.55, bodyGain: [1.05, 1.0, 0.95], flow: 0.035, caustic: [0.08, 0.06, 0.02], surfGlow: [0.15, 0.1, 0.03], surfGlowDepth: 50, tendrils: 0.75 },
+    gl: { ripple: 0.12, sigma: [0.45, 1.25, 2.8], back: [0.95, 0.8, 0.5], scatter: [0.24, 0.14, 0.04], bodyMix: 0.35, bodyGain: [1.05, 1.0, 0.95], flow: 0.035, caustic: [0.08, 0.06, 0.02], surfGlow: [0.15, 0.1, 0.03], surfGlowDepth: 50, tendrils: 0.75 },
     title: 'BUTTERBEER', unit: ['butterbeer', 'butterbeers'], head: 'cream',
     body: ['#c8862e', '#b07228', '#8a4e16', '#4a2608'],
     glow: 'rgba(255, 214, 120, 0.34)', glowAt: 'center', band: '255, 236, 200', bandAlpha: 0,
@@ -49,7 +49,7 @@ const DRINKS = {
     headScale: 0.48, headWash: 'rgba(246, 229, 192, 0.45)', rise: [4, 0], swirl: true, seam: '243, 213, 155', fresh: 0.04, fizz: 0.45, drops: 1, burp: true, pour: ['#a8681e', '#e9b45c', '#fbe0a8'],
   },
   rootbeer: {
-    gl: { sigma: [2.2, 4.2, 6.0], back: [1.0, 0.72, 0.46], scatter: [0.02, 0.005, 0.0], bodyMix: 0.3, bodyGain: [1.0, 0.9, 0.85], flow: 0.03, caustic: [0.08, 0.03, 0.01], surfGlow: [0.26, 0.08, 0.02], surfGlowDepth: 55, tendrils: 0 },
+    gl: { seamFizz: 0.5, ripple: 0.12, condAmt: 0.5, sigma: [2.2, 4.2, 6.0], back: [1.0, 0.72, 0.46], scatter: [0.02, 0.005, 0.0], bodyMix: 0.3, bodyGain: [1.0, 0.9, 0.85], flow: 0.03, caustic: [0.06, 0.025, 0.008], surfGlow: [0.24, 0.11, 0.03], surfGlowDepth: 55, tendrils: 0 },
     title: 'ROOT BEER', unit: ['root beer', 'root beers'], head: 'foam',
     body: ['#3a1206', '#1e0802', '#0f0401', '#070100'],
     glow: 'rgba(150, 60, 24, 0.55)', glowAt: 'surface', glowDepth: 60, band: '200, 120, 70', bandAlpha: 0,
@@ -58,7 +58,7 @@ const DRINKS = {
     headScale: 0.3, rise: [0, 0], darkMask: true, seam: '184, 124, 66', fresh: 0.07, fizz: 0.9, drops: 1, burp: true, pour: ['#1a0602', '#4a1a08', '#9a4a24'],
   },
   wine: {
-    gl: { sigma: [1.6, 5.5, 4.4], back: [1.0, 0.92, 0.88], scatter: [0.02, 0.0, 0.005], bodyMix: 0, bodyGain: [1, 1, 1], flow: 0, caustic: [0.16, 0.02, 0.05], surfGlow: [0.18, 0.02, 0.05], surfGlowDepth: 60, tendrils: 0, menLip: [0.78, 0.2, 0.32], menDark: [0.08, 0.0, 0.02], menGlint: [1.0, 0.85, 0.9] },
+    gl: { ripple: 0.06, sigma: [2.2, 6.0, 5.0], back: [1.0, 0.9, 0.86], scatter: [0.01, 0.0, 0.003], bodyMix: 0, bodyGain: [1, 1, 1], flow: 0, caustic: [0.05, 0.005, 0.015], surfGlow: [0.2, 0.025, 0.05], surfGlowDepth: 40, tendrils: 0, menLip: [0.56, 0.1, 0.17], menDark: [0.08, 0.0, 0.02], menGlint: [1.0, 0.85, 0.9] },
     title: 'WINE', unit: ['glass of wine', 'glasses of wine'], head: 'none',
     body: ['#8e1430', '#3c0612', '#2a0510', '#140105'],
     glow: 'rgba(196, 25, 63, 0.45)', glowAt: 'surface', glowDepth: 90, ruby: true, band: '140, 30, 60', bandAlpha: 0,
@@ -66,7 +66,7 @@ const DRINKS = {
     foam: 0, fresh: 0, fizz: 0, drops: 0, burp: false, pour: ['#3a0410', '#7a0e2a', '#d04a68'],
   },
   water: {
-    gl: { sigma: [0.14, 0.05, 0.035], back: [0.22, 0.25, 0.27], scatter: [0.0, 0.0, 0.0], bodyMix: 0, bodyGain: [1, 1, 1], flow: 0, caustic: [0.32, 0.36, 0.4], surfGlow: [0.03, 0.05, 0.06], surfGlowDepth: 40, tendrils: 0, menLip: [0.92, 0.97, 1.0], menDark: [0.2, 0.26, 0.3], menGlint: [1, 1, 1] },
+    gl: { ripple: 0.1, condAmt: 0.6, sigma: [0.06, 0.025, 0.015], back: [0.12, 0.14, 0.15], scatter: [0.0, 0.0, 0.0], bodyMix: 0, bodyGain: [1, 1, 1], flow: 0, caustic: [0.16, 0.18, 0.2], surfGlow: [0.03, 0.05, 0.06], surfGlowDepth: 40, tendrils: 0, menLip: [0.92, 0.97, 1.0], menDark: [0.2, 0.26, 0.3], menGlint: [1, 1, 1] },
     title: 'WATER', unit: ['glass of water', 'glasses of water'], head: 'none', clear: true,
     body: ['#a9c4cc', '#93b3bd', '#7c9ea9', '#5f8592'],
     glow: 'rgba(220, 240, 255, 0.12)', glowAt: 'surface', glowDepth: 60, band: '230, 245, 255', bandAlpha: 0,
@@ -77,12 +77,12 @@ const DRINKS = {
     foam: 0, fresh: 0, fizz: 0, drops: 1, burp: false, pour: ['#8fb4c2', '#d8eef5', '#ffffff'],
   },
   coffee: {
-    gl: { headTop: [0.74, 0.52, 0.32], headBot: [0.42, 0.24, 0.11], sigma: [3.4, 5.4, 7.0], back: [1.0, 0.78, 0.55], scatter: [0.0, 0.0, 0.0], bodyMix: 0.25, bodyGain: [1.0, 0.95, 0.9], flow: 0.03, caustic: [0.04, 0.02, 0.005], surfGlow: [0.2, 0.09, 0.03], surfGlowDepth: 60, tendrils: 0, creamCol: [0.9, 0.8, 0.66] },
+    gl: { ripple: 0.08, cremaGloss: 0.18, headTop: [0.66, 0.42, 0.2], headBot: [0.2, 0.09, 0.03], sigma: [3.4, 5.4, 7.0], back: [1.0, 0.78, 0.55], scatter: [0.0, 0.0, 0.0], bodyMix: 0.25, bodyGain: [1.0, 0.95, 0.9], flow: 0.03, caustic: [0.04, 0.02, 0.005], surfGlow: [0.2, 0.09, 0.03], surfGlowDepth: 60, tendrils: 0, creamCol: [0.9, 0.8, 0.66] },
     title: 'COFFEE', unit: ['coffee', 'coffees'], head: 'crema',
     body: ['#24120a', '#160a04', '#0d0602', '#060200'],
     glow: 'rgba(110, 44, 11, 0.55)', glowAt: 'surface', glowDepth: 70, band: '150, 95, 55', bandAlpha: 0,
     walls: 'lit', edge: '138, 60, 18', milk: 0, wallWidth: 0.1,
-    foam: 0.02, grainAmount: 0.25, foamShade: ['#c48a52', '#a8703e', '#8a552a'], speck: '217, 166, 106', grain: '90, 50, 20',
+    foam: 0.012, grainAmount: 0.25, foamShade: ['#c48a52', '#a8703e', '#8a552a'], speck: '217, 166, 106', grain: '90, 50, 20',
     headScale: 0.2, headTint: 'rgba(120, 61, 20, 0.3)', bodyTint: 'rgba(16, 7, 2, 0.4)', caustic: '143, 69, 24', causticAlpha: 0.08, fresh: 0.003, fizz: 0, drops: 0, steam: true, burp: false, pour: ['#0d0602', '#2b1608', '#6a3e1e'],
   },
 };
@@ -98,10 +98,10 @@ const MODS = {
       gl: { cream: true, creamCol: [0.9, 0.8, 0.66], sigma: [1.8, 2.7, 3.6], scatter: [0.16, 0.1, 0.05] },
     }) },
     coldfoam: { label: 'Cold foam', apply: () => ({
-      head: 'cream', foam: 0.06, headTex: 'beer-head', headScale: 0.32, headLift: 0.28,
+      head: 'cream', foam: 0.09, headTex: 'beer-head', headScale: 0.32, headLift: 0.28,
       headTint: null, foamShade: ['#fffdf8', '#f8f1e4', '#e9dcc3'], speck: '255, 255, 255', grain: '200, 180, 150',
       seam: '214, 190, 160', fresh: 0.02, steam: false,
-      gl: { tendrils: 0.8 },
+      gl: { tendrils: 0.6, headTop: [0.98, 0.96, 0.92], headBot: [0.88, 0.83, 0.75], cremaGloss: 0 },
     }) },
   },
   water: {
@@ -113,7 +113,7 @@ const MODS = {
     float: { label: 'Ice cream float', apply: () => ({
       float: true, foam: 0.1, fresh: 0.05, foamShade: ['#fbf3e2', '#efdcb8', '#d6b585'], headLift: 0.2,
       creamClouds: 'rgba(240, 222, 190, 1)', creamTop: true,
-      gl: { cream: true, creamMax: 0.55, creamTop: true, creamCol: [0.93, 0.86, 0.74], tendrils: 0.5 },
+      gl: { cream: true, creamMax: 0.8, creamTop: true, creamCol: [0.95, 0.9, 0.8], tendrils: 0.4 },
     }) },
   },
   wine: {
@@ -123,15 +123,15 @@ const MODS = {
       body: ['#f2e2a0', '#e6cf7c', '#d6b65a', '#a8822e'], glow: 'rgba(255, 244, 190, 0.45)',
       edge: '240, 214, 140', caustic: '255, 248, 210', causticAlpha: 0.16, ruby: false, drops: 0.6,
       meniscus: { lip: '255, 246, 214', dark: '90, 70, 20', glint: '255, 255, 240' }, legTint: '220, 190, 110',
-      gl: { sigma: [0.1, 0.24, 1.15], back: [0.6, 0.55, 0.45], caustic: [0.22, 0.2, 0.1], surfGlow: [0.06, 0.05, 0.01], menLip: [1.0, 0.96, 0.8], menDark: [0.3, 0.25, 0.1], menGlint: [1, 1, 0.94] },
-      pour: ['#a8822e', '#e6cf7c', '#fff4c8'], clear: true, clearTint: 'rgba(240, 205, 90, 0.4)', clearGlow: 'rgba(150, 120, 30, 0.55)',
+      gl: { condAmt: 0.35, sigma: [0.07, 0.13, 0.55], back: [0.3, 0.28, 0.22], caustic: [0.1, 0.09, 0.05], surfGlow: [0.06, 0.05, 0.01], menLip: [1.0, 0.96, 0.8], menDark: [0.3, 0.25, 0.1], menGlint: [1, 1, 0.94] },
+      pour: ['#a8822e', '#e6cf7c', '#fff4c8'], clear: true, clearTint: 'rgba(240, 205, 90, 0.4)', clearGlow: 'rgba(150, 120, 30, 0.55)', menLipHex: null,
     }) },
     rose: { label: 'Rosé', group: 'wine', apply: () => ({
       title: 'ROSÉ',
       body: ['#f4a3a8', '#e5848f', '#cc6377', '#8e3a4e'], glow: 'rgba(255, 190, 200, 0.45)',
       edge: '245, 160, 170', caustic: '255, 214, 220', causticAlpha: 0.16, ruby: false, drops: 0.6,
       meniscus: { lip: '255, 220, 226', dark: '110, 40, 55', glint: '255, 250, 252' }, legTint: '230, 130, 150',
-      gl: { sigma: [0.15, 1.1, 0.75], back: [0.6, 0.55, 0.55], caustic: [0.24, 0.12, 0.14], surfGlow: [0.08, 0.02, 0.03], menLip: [1.0, 0.82, 0.86], menDark: [0.35, 0.12, 0.18], menGlint: [1, 0.96, 0.97] },
+      gl: { condAmt: 0.35, sigma: [0.06, 0.42, 0.32], back: [0.3, 0.27, 0.27], caustic: [0.1, 0.06, 0.06], surfGlow: [0.08, 0.02, 0.03], menLip: [1.0, 0.82, 0.86], menDark: [0.35, 0.12, 0.18], menGlint: [1, 0.96, 0.97] },
       pour: ['#8e3a4e', '#e5848f', '#ffd6dc'], clear: true, clearTint: 'rgba(236, 110, 132, 0.42)', clearGlow: 'rgba(160, 60, 80, 0.5)',
     }) },
   },
@@ -220,7 +220,7 @@ function layout() {
   sites = Array.from({ length: 11 }, (_, i) => ({
     x: PW * (0.1 + 0.8 * ((i * 0.618 + 0.13) % 1)),
     y: PH * (0.45 + 0.5 * ((i * 0.381 + 0.27) % 1)),
-    wait: Math.random() * 0.1,
+    wait: Math.random() * 0.1, moveAt: 2 + Math.random() * 6,
   }));
 }
 
@@ -367,6 +367,14 @@ function buildGrain() {
 
 function buildRoom() {
   const [room, g] = makeCanvas(PW, PH);
+  if (TEX.roomPhoto) {
+    // A real out-of-focus room, slightly dimmed.
+    const img = TEX.roomPhoto, k = Math.max(PW / img.width, PH / img.height);
+    g.drawImage(img, (PW - img.width * k) / 2, (PH - img.height * k) / 2, img.width * k, img.height * k);
+    g.fillStyle = 'rgba(10, 8, 6, 0.25)';
+    g.fillRect(0, 0, PW, PH);
+    return room;
+  }
   const bg = g.createLinearGradient(0, 0, 0, PH);
   bg.addColorStop(0, '#625b54');
   bg.addColorStop(0.5, '#3a3530');
@@ -619,7 +627,7 @@ function wave(x) {
   const f = Math.max(0, Math.min(1, (x - Math.max(-D, surfL)) / span)) * (WN - 1);
   const i = Math.floor(f), j = Math.min(WN - 1, i + 1);
   return waveH[i] + (waveH[j] - waveH[i]) * (f - i)
-    + 0.35 * Math.sin(x * 0.11 + clock * 3.1) + 0.25 * Math.sin(x * 0.23 - clock * 4.3);
+    + ((drink.gl && drink.gl.ripple) ?? 0.12) * (Math.sin(x * 0.11 + clock * 3.1) + 0.7 * Math.sin(x * 0.23 - clock * 4.3));
 }
 
 function foamTop(x) {
@@ -738,17 +746,29 @@ function updateBubbles(dt, level) {
         x = Math.random() * PW;
         y = PH * (0.5 + Math.random() * 0.55);
       }
-      if (inLiquid(x, y, level, 12)) bubbles.push(newBubble(x, y, 1.1 + Math.random() * 1.3));
+      if (inLiquid(x, y, level, 12)) {
+        // A few bubbles cling to the glass and grow before letting go.
+        const b = newBubble(x, y, 0.5 + Math.random() * 1.2);
+        if (Math.random() < 0.08) { b.stuck = 2 + Math.random() * 6; b.v = 0; }
+        bubbles.push(b);
+      }
     }
     // Nucleation sites on the glass send up steady chains of tiny bubbles.
     for (const s of sites) {
+      // A nucleation site runs for a few seconds, then another takes over.
+      s.moveAt -= dt;
+      if (s.moveAt <= 0) {
+        s.moveAt = 3 + Math.random() * 7;
+        s.x = PW * (0.06 + Math.random() * 0.88);
+        s.y = PH * (0.4 + Math.random() * 0.58);
+      }
       s.wait -= dt;
       if (s.wait <= 0) {
         // Irregular spacing, with the odd pause, so chains don't look dotted.
         s.wait = (0.04 + Math.random() * 0.12 + (Math.random() < 0.12 ? 0.35 : 0)) / drink.fizz;
         const x = s.x + (Math.random() - 0.5) * 3;
         if (bubbles.length < 420 && inLiquid(x, s.y, level, 12)) {
-          bubbles.push(newBubble(x, s.y, 0.9 + Math.random() * 0.5, true));
+          bubbles.push(newBubble(x, s.y, 0.45 + Math.random() * 0.4, true));
         }
       }
     }
@@ -757,8 +777,14 @@ function updateBubbles(dt, level) {
   bubbles = bubbles.filter(b => {
     b.age += dt;
     // Bubbles speed up and swell as they rise, as the pressure drops.
+    if (b.stuck > 0) {
+      b.stuck -= dt;
+      b.age += 0;
+      b.r = Math.min(2.4, b.r * (1 + dt * 0.08));
+      return inLiquid(b.x, b.y, level, b.r + 2);
+    }
     b.v = Math.min(b.chain ? 150 : 120, b.v + dt * 45);
-    b.r = Math.min(b.chain ? 3 : 3.6, b.r * (1 + dt * (b.chain ? 0.35 : 0.12)));
+    b.r = Math.min(b.chain ? 2 : 2.4, b.r * (1 + dt * (b.chain ? 0.35 : 0.12)));
     const wob = Math.sin(b.age * (b.chain ? 5 : 9) + b.phase) * (b.chain ? 4 : 10) * dt;
     b.x += ux * b.v * dt - uy * wob;
     b.y += uy * b.v * dt + ux * wob;
@@ -974,12 +1000,15 @@ function drawGL(level) {
   const shade = drink.foamShade || ['#ffffff', '#ffffff', '#ffffff'];
   const men = drink.meniscus;
   const c3 = s => s.split(',').map(v => Number(v) / 255);
+  const hasFloat = !!(TEX.lemon || TEX.ice || TEX.scoop) && drawFloatLayer(level);
+  if (hasFloat) GLR.updateLayer('float', floatLayer);
   GLR.render({
+    hasFloat, condAbove: 0.3, creamAt: [PW * 0.08 + liquidShift * 0.5, 90],
     dpr: Math.min(2, dpr), PW, PH, time: clock, angle, level, fill: beer > 0.002 ? 1 : 0,
     inv: [inv.a, inv.b, 0, inv.c, inv.d, 0, inv.e, inv.f, 1],
     fwd: [m.a, m.b, 0, m.c, m.d, 0, m.e, m.f, 1],
     waves: waveH, wetL: Math.max(-D, surfL), wetR: Math.min(D, surfR), shift: liquidShift, grav: targetAngle,
-    condAmt: TEX.condensation ? 0.85 * drink.drops : 0, condMap: CONDMAP[drinkName] || [1, 1, 0.5],
+    condAmt: TEX.condensation ? (g.condAmt ?? 0.85) * Math.min(1, drink.drops) : 0, condMap: CONDMAP[drinkName] || [1, 1, 0.5],
     hasBody: !!TEX.body && drink.photoAlpha !== 0, hasHead: !!TEX.head && foamH > 1, foamH,
     foamShift, cream: creamAmt,
     bubbles: bub, bubbleTint: c3(drink.bubbleTint || '255, 240, 200'),
@@ -993,6 +1022,7 @@ function drawGL(level) {
       head: { foam: 1, cream: 2, crema: 3 }[drink.head] || 0, headScale: 1 / (drink.headScale || 0.3),
       headTop: g.headTop || hexRgb(shade[0]), headBot: g.headBot || hexRgb(shade[2]), headLift: drink.headLift || 0.15,
       tendrils: g.tendrils || 0, steam: !!drink.steam,
+      seamFizz: g.seamFizz || 0, ripple: g.ripple ?? 0.12, cremaGloss: g.cremaGloss || 0,
     },
   });
 
@@ -1014,7 +1044,6 @@ function drawGL(level) {
     ctx.save();
     ctx.translate(PW / 2, PH / 2);
     ctx.rotate(-angle);
-    drawFloaters(level);
     drawPops(level);
     ctx.restore();
   }
@@ -1280,6 +1309,70 @@ function drawCreamClouds(level) {
 
 // Ice cubes, a lemon wheel and an ice cream scoop float at the surface and
 // bob with the slosh.
+// The ice photo holds three cubes side by side; cut them apart so each can
+// float on its own.
+let iceCubes = [];
+function splitIce(src) {
+  return [[0.0, 0.36], [0.34, 0.66], [0.63, 1.0]].map(([a, b]) => {
+    const c = document.createElement('canvas');
+    c.width = Math.round(src.width * (b - a));
+    c.height = Math.round(src.height * 0.7);
+    c.getContext('2d').drawImage(src, -src.width * a, -src.height * 0.18);
+    return c;
+  });
+}
+
+// Floaters for the WebGL layer: each rides its own spot on the surface,
+// bobbing and tilting with the local wave, mostly under water.
+let floatLayer = null;
+function drawFloatLayer(level) {
+  const k = Math.min(2, dpr);
+  if (!floatLayer || floatLayer.width !== Math.round(PW * k)) {
+    floatLayer = document.createElement('canvas');
+    floatLayer.width = Math.round(PW * k);
+    floatLayer.height = Math.round(PH * k);
+  }
+  const g = floatLayer.getContext('2d');
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, floatLayer.width, floatLayer.height);
+  if (beer < 0.05) return false;
+  g.setTransform(k, 0, 0, k, 0, 0);
+  g.translate(PW / 2, PH / 2);
+  g.rotate(-angle);
+  const surf = x => level + wave(x);
+  const slope = x => (wave(x + 8) - wave(x - 8)) / 16;
+  const place = (img, x, sink, size, phase, spin) => {
+    const w = size, h = w * img.height / img.width;
+    g.save();
+    g.translate(x, surf(x) + h * sink + Math.sin(clock * 1.1 + phase) * 1.5);
+    g.rotate(Math.atan(slope(x)) * 0.8 + Math.sin(clock * 0.6 + phase) * spin);
+    g.drawImage(img, -w / 2, -h / 2, w, h);
+    g.restore();
+  };
+  if (TEX.lemon) place(TEX.lemon, -PW * 0.1 + liquidShift * 0.6 + Math.sin(clock * 0.13) * 8, 0.02, PW * 0.4, 3, 0.04);
+  iceCubes.forEach((c, i) => {
+    const x = (i - 1) * PW * 0.27 + liquidShift * (0.7 + i * 0.15) + Math.sin(clock * (0.17 + i * 0.05) + i * 2) * 10;
+    place(c, x, 0.3, PW * 0.3, i * 1.7, 0.06);
+  });
+  if (TEX.scoop) {
+    const x = PW * 0.08 + liquidShift * 0.5;
+    const s = PW * 0.5;
+    g.save();
+    g.translate(x, level - foamHeight() - s * 0.08 + Math.sin(clock * 0.9) * 1.2);
+    g.rotate(Math.atan(slope(x)) * 0.5);
+    g.drawImage(TEX.scoop, -s / 2, -s / 2, s, s);
+    // Its underside is in shadow where it sits in the foam.
+    const sh = g.createLinearGradient(0, 0, 0, s / 2);
+    sh.addColorStop(0, 'rgba(90, 50, 20, 0)');
+    sh.addColorStop(1, 'rgba(90, 50, 20, 0.35)');
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = sh;
+    g.fillRect(-s / 2, 0, s, s / 2);
+    g.restore();
+  }
+  return true;
+}
+
 function drawFloaters(level) {
   if (beer < 0.05) return;
   const bob = i => Math.sin(clock * 1.3 + i * 2) * 3 + angleV * 6 * (i % 2 ? 1 : -1);
@@ -1820,6 +1913,7 @@ function loadTextures() {
   if (drink.ice) want.ice = 'ice';
   if (drink.lemon) want.lemon = 'lemon';
   if (drink.float) want.scoop = 'scoop';
+  if (!TEX.roomPhoto) want.roomPhoto = 'room';
   for (const [key, file] of Object.entries(want)) {
     const img = new Image();
     img.onload = () => {
@@ -1835,7 +1929,11 @@ function loadTextures() {
       }
       if (key === 'condensation' && useGL) GLR.setTexture('cond', img);
       if (key === 'clouds') cloudTile = tintClouds(img, drink.creamClouds);
-      if (key === 'ice') TEX.ice = lumaAlpha(img);
+      if (key === 'ice') { TEX.ice = lumaAlpha(img); iceCubes = splitIce(TEX.ice); }
+      if (key === 'roomPhoto') {
+        sprites.room = buildRoom();
+        if (useGL) GLR.setTexture('room', sprites.room);
+      }
     };
     img.src = `textures/${file}.${['lemon', 'scoop'].includes(key) ? 'png' : 'jpg'}`;
   }
@@ -2028,7 +2126,7 @@ function switchDrink(name, mods) {
   q.set('drink', name);
   q.set('mods', mods.join(','));
   history.replaceState(null, '', `?${q}`);
-  for (const k of Object.keys(TEX)) delete TEX[k];
+  for (const k of Object.keys(TEX)) if (k !== 'roomPhoto') delete TEX[k];
   headPattern = bodyPattern = bodyTile = cloudTile = null;
   if (useGL) for (const k of ['body', 'head', 'cond']) GLR.setTexture(k, null);
   sprites = buildSprites();
