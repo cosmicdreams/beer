@@ -80,10 +80,32 @@ html, body {
   background: radial-gradient(circle at 50% 45%, rgba(60, 30, 4, 0.35), rgba(30, 14, 2, 0.75));
 }
 #start[hidden] { display: none; }
+#picker {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 4px 0 14px;
+  max-width: 22em;
+}
+#picker button {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 248, 232, 0.7);
+  background: rgba(30, 14, 2, 0.35);
+  color: #fff8e8;
+}
+#picker button[aria-pressed="true"] {
+  background: #fff8e8;
+  color: #3a1c04;
+}
 #start h1 {
   margin: 0;
-  font-size: 84px;
-  letter-spacing: 8px;
+  font-size: clamp(36px, 11vw, 84px);
+  letter-spacing: 0.06em;
   color: #fff8e8;
   text-shadow: 0 3px 18px rgba(60, 25, 0, 0.8);
 }
