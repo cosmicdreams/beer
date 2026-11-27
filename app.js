@@ -643,25 +643,39 @@ function stepWavesZ(dt) {
 
 const MAX_ICE = 5;
 let ice = [];
-const iceSize = () => PW * 0.2;
+let iceDisp = 0;          // share of the glass's volume the ice pushes aside
+const iceSize = () => PW * 0.4;
 const glassRi = () => PW * 0.5 * 0.992 - 4.5;
 
-// Drop one more cube in. Returns false if the glass already holds five.
-function addIce(settled = false) {
+function savedIce() {
+  try { return Math.max(0, Math.min(MAX_ICE, Number(localStorage.getItem('beer.ice')) || 0)); } catch { return 0; }
+}
+function saveIce() {
+  try { localStorage.setItem('beer.ice', String(ice.length)); } catch { /* ignore */ }
+}
+
+// Drop one more cube in from above the glass. False if it already holds five.
+function addIce() {
   if (ice.length >= MAX_ICE) return false;
-  const s = iceSize(), lim = glassRi() - s * 0.7;
-  let x = 0, z = 0;
-  for (let tries = 0; tries < 30; tries++) {
-    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * lim;
-    x = Math.cos(a) * r; z = Math.sin(a) * r;
-    if (ice.every(c => Math.hypot(c.x - x, c.z - z) > s * 1.1)) break;
-  }
+  const s = iceSize(), lim = glassRi() - s * 0.5;
+  const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * lim;
+  // Start above the rim, clear of any cube still on its way in.
+  const top = Math.min(-PH / 2 - s, ...ice.map(c => c.y - s * 1.2));
   ice.push({
-    x, z, vx: 0, vz: 0, fy: settled ? 0 : -PH * 0.8, fv: 0, landed: settled,
-    yaw: Math.random() * 6.28, yawV: (Math.random() - 0.5) * 1.5,
-    a: settled ? 0 : (Math.random() - 0.5), b: settled ? 0 : (Math.random() - 0.5),
-    av: settled ? 0 : 4 * (Math.random() - 0.5), bv: settled ? 0 : 4 * (Math.random() - 0.5),
+    x: Math.cos(a) * r, y: top, z: Math.sin(a) * r, vx: 0, vy: 0, vz: 0, inside: false, wet: false,
+    yaw: Math.random() * 6.28, a: Math.random() - 0.5, b: Math.random() - 0.5,
+    yawV: (Math.random() - 0.5) * 2, av: 3 * (Math.random() - 0.5), bv: 3 * (Math.random() - 0.5),
   });
+  saveIce();
+  return true;
+}
+function removeIce() {
+  if (!ice.length) return false;
+  // Take out the highest cube.
+  let top = 0;
+  ice.forEach((c, i) => { if (c.y < ice[top].y) top = i; });
+  ice.splice(top, 1);
+  saveIce();
   return true;
 }
 
@@ -674,63 +688,97 @@ function clink(speed) {
   if (navigator.vibrate) navigator.vibrate(8);
 }
 
-// Cubes fall, plunge, bob on a buoyancy spring, drift with the slosh, and
-// knock against each other and the glass.
+// Ice physics, in the glass's own frame (x right, y down, z into the screen).
+// Each cube is weighed down by gravity and held up by the water it displaces
+// (ice floats nine-tenths under). Cubes can't overlap, so a cube landing on
+// another pushes it deeper; the pile floats as one. They stay in the glass
+// when the water is drunk and rest on the bottom when it's gone.
 function updateIce(dt) {
-  const s = iceSize(), lim = glassRi() - s * 0.62;
+  const s = iceSize(), r = s * 0.56, Ri = glassRi(), lim = Ri - s * 0.5;
+  const floor = PH / 2 - s * 0.5, lid = -PH / 2 + s * 0.5;
+  const cP = Math.cos(pitch);
+  const G = [Math.sin(angle) * cP, Math.cos(angle) * cP, Math.sin(pitch)];
+  const hasWater = beer > 0.002;
+  const row = (H, v) => {
+    const f = Math.max(0, Math.min(1, v / (2 * Ri) + 0.5)) * (WN - 1), i = Math.floor(f), j = Math.min(WN - 1, i + 1);
+    return H[i] + (H[j] - H[i]) * (f - i);
+  };
+  const steps = 3, h = dt / steps;
+  let disp = 0;
+  for (let n = 0; n < steps; n++) {
+    disp = 0;
+    for (const c of ice) {
+      // How much of the cube is under water.
+      const depth = hasWater ? c.x * G[0] + c.y * G[1] + c.z * G[2] - lastLevel * cP - row(waveH, c.x) - row(waveHz, c.z) : -1e4;
+      const frac = Math.max(0, Math.min(1, 0.5 + depth / (2 * r)));
+      disp += frac;
+      const lift = 1 - frac / 0.92;            // gravity minus buoyancy
+      c.vx += G[0] * 1900 * lift * h;
+      c.vy += G[1] * 1900 * lift * h;
+      c.vz += G[2] * 1900 * lift * h;
+      if (frac > 0) {
+        c.vx += -angleV * 60 * frac * h;
+        c.vz += -pitchV * 60 * frac * h;
+      }
+      const drag = Math.exp(-h * (0.15 + 3.2 * frac));
+      c.vx *= drag; c.vy *= drag; c.vz *= drag;
+      c.x += c.vx * h; c.y += c.vy * h; c.z += c.vz * h;
+      // Plunging in: a splash, a ripple ring and a sound.
+      if (!c.wet && frac > 0.25) {
+        c.wet = true;
+        const speed = Math.hypot(c.vx, c.vy, c.vz);
+        if (speed > 150 && n === 0) { splash(c.x, FLOATER.ice, speed); ring(c.x, c.z, 9); }
+      } else if (c.wet && frac < 0.02) c.wet = false;
+      // The glass: wall, bottom, and (once inside) the rim.
+      const rr = Math.hypot(c.x, c.z);
+      if (rr > lim) {
+        const nx = c.x / rr, nz = c.z / rr;
+        c.x = nx * lim; c.z = nz * lim;
+        const vn = c.vx * nx + c.vz * nz;
+        if (vn > 0) { c.vx -= 1.3 * vn * nx; c.vz -= 1.3 * vn * nz; if (vn > 60) clink(vn); }
+      }
+      if (c.y > floor) { c.y = floor; if (c.vy > 0) { if (c.vy > 120) clink(c.vy); c.vy *= -0.2; } c.vx *= 0.9; c.vz *= 0.9; }
+      if (c.y > lid) c.inside = true;
+      if (c.inside && c.y < lid) { c.y = lid; if (c.vy < 0) c.vy *= -0.2; }
+    }
+    // Cubes push each other apart.
+    for (let i = 0; i < ice.length; i++) {
+      for (let j = i + 1; j < ice.length; j++) {
+        const a = ice[i], b = ice[j];
+        let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+        const d = Math.hypot(dx, dy, dz) || 1, min = r * 2;
+        if (d >= min) continue;
+        dx /= d; dy /= d; dz /= d;
+        const push = (min - d) / 2;
+        a.x -= dx * push; a.y -= dy * push; a.z -= dz * push;
+        b.x += dx * push; b.y += dy * push; b.z += dz * push;
+        const closing = (a.vx - b.vx) * dx + (a.vy - b.vy) * dy + (a.vz - b.vz) * dz;
+        if (closing > 0) {
+          const k = closing * 0.6;
+          a.vx -= k * dx; a.vy -= k * dy; a.vz -= k * dz;
+          b.vx += k * dx; b.vy += k * dy; b.vz += k * dz;
+          a.yawV += (Math.random() - 0.5) * closing * 0.01; b.av += (Math.random() - 0.5) * closing * 0.01;
+          if (closing > 70) clink(closing);
+        }
+      }
+    }
+  }
   for (const c of ice) {
-    if (!c.landed) {
-      c.fv += 1900 * dt;
-      c.fy += c.fv * dt;
-      c.a += c.av * dt;
-      c.b += c.bv * dt;
-      if (c.fy >= -s * 0.3) {
-        c.landed = true;
-        splash(c.x, FLOATER.ice, c.fv);
-        ring(c.x, c.z, 7);
-        c.fv *= 0.35;
-      }
-    } else {
-      c.fv += (-55 * c.fy - 5 * c.fv) * dt;
-      c.fy += c.fv * dt;
-      c.av += (-30 * c.a - 3 * c.av) * dt; c.a += c.av * dt;
-      c.bv += (-30 * c.b - 3 * c.bv) * dt; c.b += c.bv * dt;
-      c.vx += (-angleV * 70 - c.vx * 0.9 + (Math.random() - 0.5) * 8) * dt;
-      c.vz += (-pitchV * 70 - c.vz * 0.9 + (Math.random() - 0.5) * 8) * dt;
+    c.yaw += c.yawV * dt; c.a += c.av * dt; c.b += c.bv * dt;
+    if (c.wet) {
+      // Floating ice rolls until a face lies level.
+      const q = Math.PI / 2;
+      c.av += (Math.round(c.a / q) * q - c.a) * 14 * dt;
+      c.bv += (Math.round(c.b / q) * q - c.b) * 14 * dt;
     }
-    c.x += c.vx * dt;
-    c.z += c.vz * dt;
-    c.yaw += c.yawV * dt;
-    c.yawV *= Math.exp(-dt * 0.4);
-    const r = Math.hypot(c.x, c.z);
-    if (r > lim) {
-      const nx = c.x / r, nz = c.z / r;
-      c.x = nx * lim; c.z = nz * lim;
-      const vn = c.vx * nx + c.vz * nz;
-      if (vn > 0) { c.vx -= 1.4 * vn * nx; c.vz -= 1.4 * vn * nz; if (vn > 25 && c.landed) clink(vn); }
-    }
+    const damp = Math.exp(-dt * (c.wet ? 1.6 : 0.3));
+    c.yawV *= damp; c.av *= damp; c.bv *= damp;
   }
-  for (let i = 0; i < ice.length; i++) {
-    for (let j = i + 1; j < ice.length; j++) {
-      const a = ice[i], b = ice[j];
-      let dx = b.x - a.x, dz = b.z - a.z;
-      const d = Math.hypot(dx, dz) || 1, min = s * 1.08;
-      if (d >= min || Math.abs(a.fy - b.fy) > s) continue;
-      dx /= d; dz /= d;
-      const push = (min - d) / 2;
-      a.x -= dx * push; a.z -= dz * push; b.x += dx * push; b.z += dz * push;
-      const closing = (a.vx - b.vx) * dx + (a.vz - b.vz) * dz;
-      if (closing > 0) {
-        a.vx -= closing * dx * 0.7; a.vz -= closing * dz * 0.7;
-        b.vx += closing * dx * 0.7; b.vz += closing * dz * 0.7;
-        a.yawV += (Math.random() - 0.5) * closing * 0.02;
-        b.yawV += (Math.random() - 0.5) * closing * 0.02;
-        if (closing > 25) clink(closing);
-      }
-    }
-  }
-  for (const r of rings) r.t += dt;
-  rings = rings.filter(r => r.t < 3);
+  // Ice under water raises the level.
+  const share = 0.85 * s * s * s / (Math.PI * Ri * Ri * PH);
+  iceDisp += (disp * share - iceDisp) * Math.min(1, dt * 6);
+  for (const g of rings) g.t += dt;
+  rings = rings.filter(g => g.t < 3);
 }
 
 function stepWaves(dt) {
@@ -843,7 +891,7 @@ function update(dt) {
       pendingExtras = [];
     }
   } else if (beer > 0) {
-    sip = Math.max(0, Math.min(beer - fits, DRINK_RATE * dt));
+    sip = Math.max(0, Math.min(beer + iceDisp - fits, beer, DRINK_RATE * dt));
     beer -= sip;
     if (sip > 0) {
       state = 'drinking';
@@ -871,7 +919,7 @@ function update(dt) {
     if (uprightFor > 0.8) refill();
   }
 
-  const level = beer > 0 ? surfaceFor(poly, beer * total) : Math.max(...poly.map(p => p.y)) + 50;
+  const level = beer > 0 ? surfaceFor(poly, Math.min(0.995, beer + iceDisp) * total) : Math.max(...poly.map(p => p.y)) + 50;
   const wet = clipBelow(poly, level).filter(p => Math.abs(p.y - level) < 0.5).map(p => p.x);
   surfL = wet.length ? Math.min(...wet) : -1e4;
   surfR = wet.length ? Math.max(...wet) : 1e4;
@@ -1001,7 +1049,6 @@ function drawAddPour(level) {
 }
 
 function refill() {
-  ice = [];
   state = 'refilling';
   uprightFor = 0;
   startFizz();
@@ -1303,10 +1350,8 @@ function state3d(level, inv, m, bub, hasFloat) {
   };
   const icePos = new Float32Array(15), iceRot = new Float32Array(45);
   ice.forEach((c, i) => {
-    const y = (L + row(waveH, c.x) + row(waveHz, c.z) - c.x * G[0] - c.z * G[2]) / Math.max(0.3, G[1]);
-    const sink = size * 0.36 + c.fy;
-    icePos.set([c.x + G[0] * sink, y + G[1] * sink, c.z + G[2] * sink], i * 3);
-    const M = mm(Rw, mm(Ry(c.yaw), mm(Rx(c.a), Rz(c.b))));
+    icePos.set([c.x, c.y, c.z], i * 3);
+    const M = mm(Ry(c.yaw), mm(Rx(c.a), Rz(c.b)));
     iceRot.set([...M[0], ...M[1], ...M[2]], i * 9);
   });
   const ringData = new Float32Array(16);
@@ -2554,11 +2599,24 @@ function renderActions() {
     return b;
   };
   if (drink.gl && drink.gl.mode3d && useGL) {
-    // Ice: each tap drops in one more cube, up to five.
-    const b = button(`Ice<small>${ice.length}/${MAX_ICE}</small>`, () => {
-      if (beer > 0.05 && state !== 'refilling' && addIce()) renderActions();
-    });
-    b.disabled = ice.length >= MAX_ICE;
+    // Ice: minus and plus, from none to five cubes.
+    const wrap = document.createElement('div');
+    wrap.className = 'stepper';
+    const step = (label, name, onClick, disabled) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.setAttribute('aria-label', name);
+      b.disabled = disabled;
+      b.addEventListener('click', () => { if (onClick()) renderActions(); });
+      wrap.appendChild(b);
+    };
+    step('\u2212', 'Less ice', removeIce, ice.length === 0);
+    const label = document.createElement('span');
+    label.textContent = `Ice ${ice.length}`;
+    wrap.appendChild(label);
+    step('+', 'More ice', addIce, ice.length >= MAX_ICE);
+    actionsEl.appendChild(wrap);
   }
   const all = MODS[drinkName] || {};
   const group = Object.keys(all).filter(id => all[id].group);
@@ -2630,6 +2688,9 @@ function switchDrink(name, mods) {
   beersDrunk = loadCount();
   legs = [];
   if (fresh) {
+    ice = [];
+    iceDisp = 0;
+    if (drink.gl && drink.gl.mode3d) { const n = savedIce(); for (let i = 0; i < n; i++) addIce(); }
     bubbles = [];
     lace = [];
     creamAmt = 0;
@@ -2764,7 +2825,10 @@ if (params.has('tilt') || params.has('sim')) {
 if (params.has('beer')) beer = Math.max(0, Math.min(FULL, Number(params.get('beer'))));
 if (params.has('pour')) refill();
 // ?ice=3 starts with cubes already floating; ?pitch=20 leans the glass away.
-for (let i = 0; i < Math.min(MAX_ICE, Number(params.get('ice')) || 0); i++) addIce(true);
+{
+  const n = params.has('ice') ? Math.min(MAX_ICE, Number(params.get('ice')) || 0) : (drink.gl && drink.gl.mode3d ? savedIce() : 0);
+  for (let i = 0; i < n; i++) addIce();
+}
 if (params.has('pitch')) targetPitch = pitch = Number(params.get('pitch')) * RAD;
 
 let last = performance.now();

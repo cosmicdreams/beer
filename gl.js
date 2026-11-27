@@ -535,7 +535,7 @@ void main() {
       bool done = false;
       float half1 = uIceSize * 0.5;
 
-      for (int step = 0; step < 6; step++) {
+      for (int step = 0; step < 9; step++) {
         // Where this ray leaves through the glass wall.
         float A = dot(d.xz, d.xz), B = dot(o.xz, d.xz), Cc = dot(o.xz, o.xz) - Ri * Ri;
         float tC = A > 1e-6 ? (-B + sqrt(max(0.0, B * B - A * Cc))) / A : 1e5;
