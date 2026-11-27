@@ -43,7 +43,7 @@ const DRINKS = {
     glow: 'rgba(255, 214, 120, 0.34)', glowAt: 'center', band: '255, 236, 200', bandAlpha: 0,
     walls: 'dark', edge: '80, 40, 8', milk: 0.06, cloudy: true,
     foam: 0.07, foamShade: ['#fffdf8', '#f6ead0', '#e6cb92'], speck: '255, 252, 242', grain: '214, 176, 116',
-    headScale: 0.48, rise: [4, 0], swirl: true, seam: '243, 213, 155', fresh: 0.04, fizz: 0.45, drops: 1, burp: true, pour: ['#a8681e', '#e9b45c', '#fbe0a8'],
+    headScale: 0.48, headWash: 'rgba(239, 227, 196, 0.45)', rise: [4, 0], swirl: true, seam: '243, 213, 155', fresh: 0.04, fizz: 0.45, drops: 1, burp: true, pour: ['#a8681e', '#e9b45c', '#fbe0a8'],
   },
   rootbeer: {
     title: 'ROOT BEER', unit: ['root beer', 'root beers'], head: 'foam',
@@ -55,18 +55,18 @@ const DRINKS = {
   },
   wine: {
     title: 'WINE', unit: ['glass of wine', 'glasses of wine'], head: 'none',
-    body: ['#4a0a1e', '#300614', '#1c020b', '#100106'],
+    body: ['#6e0a1c', '#4a0614', '#3a0410', '#1a0207'],
     glow: 'rgba(158, 18, 52, 0.55)', glowAt: 'surface', glowDepth: 110, ruby: true, band: '140, 30, 60', bandAlpha: 0,
-    walls: 'lit', edge: '184, 24, 64', milk: 0, legs: true, photoShade: 'rgba(34, 0, 10, 0.35)', caustic: '200, 48, 78',
+    walls: 'lit', edge: '94, 15, 32', milk: 0, legs: true, photoAlpha: 0.3, photoShade: 'rgba(34, 0, 10, 0.2)', caustic: '200, 40, 70',
     foam: 0, fresh: 0, fizz: 0, drops: 0, burp: false, pour: ['#3a0410', '#7a0e2a', '#d04a68'],
   },
   coffee: {
     title: 'COFFEE', unit: ['coffee', 'coffees'], head: 'crema',
     body: ['#24120a', '#160a04', '#0d0602', '#060200'],
-    glow: 'rgba(107, 51, 20, 0.55)', glowAt: 'surface', glowDepth: 55, band: '150, 95, 55', bandAlpha: 0,
-    walls: 'lit', edge: '90, 43, 16', milk: 0,
-    foam: 0.016, foamShade: ['#c48a52', '#a8703e', '#8a552a'], speck: '217, 166, 106', grain: '90, 50, 20',
-    headScale: 0.12, headTint: 'rgba(120, 61, 20, 0.35)', bodyTint: 'rgba(20, 8, 2, 0.55)', caustic: '138, 74, 34', fresh: 0.003, fizz: 0, drops: 0, steam: true, burp: false, pour: ['#0d0602', '#2b1608', '#6a3e1e'],
+    glow: 'rgba(74, 34, 11, 0.8)', glowAt: 'surface', glowDepth: 60, band: '150, 95, 55', bandAlpha: 0,
+    walls: 'lit', edge: '90, 42, 14', milk: 0,
+    foam: 0.014, foamShade: ['#c48a52', '#a8703e', '#8a552a'], speck: '217, 166, 106', grain: '90, 50, 20',
+    headScale: 0.12, headTint: 'rgba(120, 61, 20, 0.3)', bodyTint: 'rgba(20, 8, 2, 0.3)', caustic: '138, 74, 34', fresh: 0.003, fizz: 0, drops: 0, steam: true, burp: false, pour: ['#0d0602', '#2b1608', '#6a3e1e'],
   },
 };
 const drinkName = DRINKS[params.get('drink')] ? params.get('drink') : (loadDrink() || 'beer');
@@ -397,12 +397,10 @@ function buildGlass() {
     bg2.fillRect(0, 0, w, PH);
     g.drawImage(band, x - w / 2, 0, w, PH);
   };
-  streak(PW * 0.035, 16, 0.12);
-  streak(PW * 0.035, 3, 0.3);
-  streak(PW * 0.085, 18, 0.06);
-  streak(PW * 0.965, 16, 0.1);
-  streak(PW * 0.965, 3, 0.26);
-  streak(PW * 0.915, 14, 0.04);
+  streak(PW * 0.035, 3, 0.26);   // crisp rim glint on the left
+  streak(PW * 0.07, 10, 0.05);
+  streak(PW * 0.9, 26, 0.12);    // a broad soft reflection on the right
+  streak(PW * 0.975, 2, 0.12);
 
   const vignette = g.createRadialGradient(PW / 2, PH * 0.45, Math.min(PW, PH) * 0.4, PW / 2, PH / 2, D * 0.62);
   vignette.addColorStop(0, 'rgba(20, 8, 0, 0)');
@@ -492,7 +490,7 @@ function foamHeight() {
 
 // Surface ripple, in the liquid frame.
 function wave(x) {
-  return Math.sin(x * 0.018 + clock * 5.5) * slosh * 14
+  return Math.sin(x * 0.009 + clock * 4) * slosh * 10
     + Math.sin(x * 0.047 - clock * 2.1) * (0.4 + slosh * 4);
 }
 
@@ -763,7 +761,7 @@ function draw(level) {
     ctx.globalCompositeOperation = 'screen';
     ctx.globalAlpha = 0.8;
     // Flip it per drink so each glass has its own drops.
-    const flip = { beer: [1, 1], butterbeer: [-1, 1], rootbeer: [1, -1] }[drinkName] || [1, 1];
+    const flip = { beer: [1, 1], butterbeer: [-1, 1], rootbeer: [-1, 1] }[drinkName] || [1, 1];
     ctx.save();
     ctx.translate(flip[0] < 0 ? PW : 0, flip[1] < 0 ? PH : 0);
     ctx.scale(flip[0], flip[1]);
@@ -810,10 +808,9 @@ function drawLiquid(level) {
   ctx.clip();
   const photo = !!TEX.body;
   if (photo) {
-    const m = ctx.getTransform();
-    ctx.setTransform(baseMatrix);
-    drawLiveBody();
-    ctx.setTransform(m);
+    ctx.globalAlpha = drink.photoAlpha ?? 1;
+    drawLiveBody(level);
+    ctx.globalAlpha = 1;
     if (drink.photoShade) {
       ctx.fillStyle = drink.photoShade;
       ctx.fillRect(-D, level - 20, D * 2, D * 2);
@@ -888,58 +885,72 @@ function drawLiquid(level) {
 
 // The body photo, alive: bubbles rise (two layers, for depth), swirls drift,
 // light wanders, and the whole liquid slides a little with the slosh.
-function drawLiveBody() {
+function drawLiveBody(level) {
   if (!bodyPattern || !bodyPattern.setTransform) { drawCover(TEX.body); return; }
+  // In the liquid frame, so bubbles rise against gravity and swirls hang
+  // with it however the phone is held.
+  const m = ctx.getTransform();
   const img = bodyTile;
   const k = Math.max(PW / img.width, PH / img.height);
   const th = img.height * k;
   const [rise, rise2] = drink.rise || [0, 0];
-  const sx = (PW - img.width * k) / 2 + liquidShift;
   const layer = (scale, speed, phase, swayX, swayY) => {
     const y = -((clock * speed + phase) % (th * scale)) + Math.sin(clock * 0.13 + phase) * swayY;
-    bodyPattern.setTransform(new DOMMatrix().translate(sx + Math.sin(clock * 0.11 + phase) * swayX, y).scale(k * scale));
+    bodyPattern.setTransform(new DOMMatrix().translate(liquidShift + Math.sin(clock * 0.11 + phase) * swayX, y).scale(k * scale));
     ctx.fillStyle = bodyPattern;
-    ctx.fillRect(0, 0, PW, PH);
+    ctx.fillRect(-D, level - 20, D * 2, D * 2);
   };
-  layer(1, rise, 0, drink.swirl ? 14 : 3, drink.swirl ? 10 : 0);
+  ctx.globalAlpha = drink.photoAlpha ?? 1;
+  layer(1, rise, 0, drink.swirl ? 22 : 3, drink.swirl ? 16 : 0);
   if (rise2) {
     // A nearer, faster layer of bubbles.
     ctx.globalCompositeOperation = 'screen';
-    ctx.globalAlpha = 0.28;
+    ctx.globalAlpha = 0.14;
     layer(1.45, rise2, th * 0.37, 4, 0);
   } else if (drink.swirl) {
     // A second copy drifting the other way, so the swirls change shape.
-    ctx.globalAlpha = 0.4;
-    layer(1.15, -3, th * 0.5, -18, 12);
+    ctx.globalAlpha = 0.45;
+    layer(1.15, -6, th * 0.5, -26, 18);
   }
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
+
+  // Glass-fixed effects, in screen space.
+  ctx.setTransform(baseMatrix);
+  if (drink.bodyTint) {
+    ctx.fillStyle = drink.bodyTint;
+    ctx.fillRect(0, 0, PW, PH);
+  }
   if (drink.caustic) {
-    // Soft patches of light wandering through still liquid.
+    // Soft patches of light wandering through still liquid, visibly moving.
     for (let i = 0; i < 3; i++) {
-      const x = PW * (0.5 + 0.38 * Math.sin(clock * (0.09 + i * 0.03) + i * 2.1));
-      const y = PH * (0.45 + 0.3 * Math.sin(clock * (0.07 + i * 0.02) + i * 1.3));
-      const r = PW * (0.35 + 0.1 * i);
+      const x = PW * (0.5 + 0.42 * Math.sin(clock * (0.35 + i * 0.12) + i * 2.1) + liquidShift / PW);
+      const y = PH * (0.45 + 0.32 * Math.sin(clock * (0.27 + i * 0.09) + i * 1.3));
+      const r = PW * (0.4 + 0.12 * i);
       const cg = ctx.createRadialGradient(x, y, 0, x, y, r);
-      cg.addColorStop(0, `rgba(${drink.caustic}, 0.16)`);
+      cg.addColorStop(0, `rgba(${drink.caustic}, ${i ? 0.14 : 0.22})`);
       cg.addColorStop(1, `rgba(${drink.caustic}, 0)`);
       ctx.fillStyle = cg;
       ctx.fillRect(0, 0, PW, PH);
     }
   }
-  if (drink.bodyTint) {
-    ctx.fillStyle = drink.bodyTint;
-    ctx.fillRect(0, 0, PW, PH);
-  }
   if (drink.darkMask) {
-    // Root beer is nearly black: let the fizz show only near the surface and walls.
+    // Root beer is nearly black: fizz shows near the surface and the walls.
     const v = ctx.createLinearGradient(0, 0, 0, PH);
-    v.addColorStop(0, 'rgba(20, 5, 2, 0.25)');
+    v.addColorStop(0, 'rgba(20, 5, 2, 0.2)');
     v.addColorStop(0.35, 'rgba(20, 5, 2, 0.75)');
     v.addColorStop(1, 'rgba(20, 5, 2, 0.85)');
     ctx.fillStyle = v;
-    ctx.fillRect(PW * 0.08, 0, PW * 0.84, PH);
+    ctx.fillRect(0, 0, PW, PH);
+    const h = ctx.createLinearGradient(0, 0, PW, 0);
+    h.addColorStop(0, 'rgba(122, 40, 10, 0.5)');
+    h.addColorStop(0.14, 'rgba(122, 40, 10, 0)');
+    h.addColorStop(0.86, 'rgba(122, 40, 10, 0)');
+    h.addColorStop(1, 'rgba(122, 40, 10, 0.5)');
+    ctx.fillStyle = h;
+    ctx.fillRect(0, 0, PW, PH);
   }
+  ctx.setTransform(m);
 }
 
 // Curved glass: pale drinks darken toward the side walls; dark drinks show
@@ -960,7 +971,7 @@ function headPath(level, bottom) {
   ctx.beginPath();
   ctx.moveTo(-D, level + foamTop(-D));
   for (let x = -D; x <= D; x += 4) ctx.lineTo(x, level + foamTop(x));
-  for (let x = D; x >= -D; x -= 4) ctx.lineTo(x, level + wave(x) + bottom + 2 + 2 * Math.sin(x * 0.07 + 0.5) + 1.2 * Math.sin(x * 0.19));
+  for (let x = D; x >= -D; x -= 4) ctx.lineTo(x, level + wave(x) + bottom);
   ctx.closePath();
 }
 
@@ -1024,6 +1035,10 @@ function drawHead(level) {
     ctx.fillStyle = sprites.foam;
   }
   ctx.fillRect(-D, level - h - 30, D * 2, h + 40);
+  if (headPattern && drink.headWash) {
+    ctx.fillStyle = drink.headWash;
+    ctx.fillRect(-D, level - h - 30, D * 2, h + 40);
+  }
   if (headPattern && drink.headTint) {
     ctx.globalCompositeOperation = 'multiply';
     ctx.fillStyle = drink.headTint;
@@ -1033,8 +1048,8 @@ function drawHead(level) {
   if (headPattern && drink.headLift) {
     // Lift the photo's grey cast toward lit white foam, brightest at the top.
     const lift = ctx.createLinearGradient(0, level - h, 0, level);
-    lift.addColorStop(0, `rgba(255, 252, 244, ${drink.headLift * 1.5})`);
-    lift.addColorStop(1, `rgba(255, 248, 230, ${drink.headLift * 0.3})`);
+    lift.addColorStop(0, `rgba(246, 241, 226, ${drink.headLift * 1.6})`);
+    lift.addColorStop(1, `rgba(233, 220, 182, ${drink.headLift * 0.8})`);
     ctx.fillStyle = lift;
     ctx.fillRect(-D, level - h - 30, D * 2, h + 40);
   }
@@ -1074,12 +1089,13 @@ function drawHead(level) {
 
   // Feather the head's lower edge so the photo doesn't look cut out.
   if (headPattern) {
-    const tone = crema ? '40, 16, 4' : drink.seam;
-    const fb = ctx.createLinearGradient(0, level - (crema ? 6 : 12), 0, level + 4);
-    fb.addColorStop(0, `rgba(${tone}, 0)`);
-    fb.addColorStop(1, `rgba(${tone}, 0.55)`);
+    const tone = crema ? '200, 147, 90' : drink.foamShade[1].match(/\w\w/g).map(h => parseInt(h, 16)).join(', ');
+    const depth = crema ? 8 : 14;
+    const fb = ctx.createLinearGradient(0, level + 4, 0, level + 6 + depth);
+    fb.addColorStop(0, `rgba(${tone}, 0.75)`);
+    fb.addColorStop(1, `rgba(${tone}, 0)`);
     ctx.fillStyle = fb;
-    ctx.fillRect(-D, level - 12, D * 2, 16);
+    ctx.fillRect(-D, level + 4, D * 2, depth + 2);
   }
   if (crema) {
     // Wet specular line on top, and tiny bubbles where it meets the glass.
@@ -1155,11 +1171,11 @@ function drawSteam(level) {
       const t = k / height;
       const x = x0 + Math.sin(k * 0.03 - clock * 1.1 + i * 2) * (3 + k * 0.14);
       const y = top - 4 - k;
-      const r = 8 + t * 45;
-      const a = 0.13 * fade * (1 - t) * Math.min(1, t * 5);
+      const r = 3 + t * 14;
+      const a = 0.09 * fade * (1 - t) * Math.min(1, t * 5);
       const pg = ctx.createRadialGradient(x, y, 0, x, y, r);
-      pg.addColorStop(0, `rgba(233, 222, 208, ${a})`);
-      pg.addColorStop(1, 'rgba(233, 222, 208, 0)');
+      pg.addColorStop(0, `rgba(250, 246, 240, ${a})`);
+      pg.addColorStop(1, 'rgba(250, 246, 240, 0)');
       ctx.fillStyle = pg;
       ctx.fillRect(x - r, y - r, r * 2, r * 2);
     }
@@ -1375,7 +1391,7 @@ function loadTextures() {
       TEX[key] = img;
       if (key === 'head') headPattern = buildHeadPattern2(img);
       if (key === 'body') {
-        bodyTile = seamless(img, 'y');
+        bodyTile = seamless(seamless(img, 'x'), 'y');
         bodyPattern = ctx.createPattern(bodyTile, 'repeat');
       }
     };
