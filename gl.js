@@ -75,6 +75,9 @@ uniform float uRipple;
 uniform float uCremaGloss;
 uniform sampler2D uBubbles;  // bubbles, drawn first into their own layer
 uniform vec3 uWallGlow;
+uniform float uShear;       // angular velocity of the slosh, to drag cream and tendrils
+uniform vec3 uScoop;        // ice cream scoop: liquid-frame x, centre y, radius (0 if none)
+uniform float uNoPops;
 
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec2 p) {
@@ -143,7 +146,9 @@ void main() {
     // right, magnified, and squeezed toward the walls.
     float lensX = c.x - c.x * 0.8 * sin(u * 1.3) / sin(1.3);
     vec2 refr = vec2(lensX + uShift * 0.6, p.y - 12.0) + vec2(slope * 7.0, 0.0) + wob * 10.0;
-    vec3 bg = room(refr);
+    float blurR = 4.0 + 22.0 * smoothstep(0.25, 1.0, abs(u));
+    vec3 bg = (room(refr) * 2.0 + room(refr + vec2(blurR, 0.0)) + room(refr - vec2(blurR, 0.0))
+      + room(refr + vec2(0.0, blurR * 0.6)) + room(refr - vec2(0.0, blurR * 0.6))) / 6.0;
     float window = smoothstep(0.9, 0.0, length((p / uP - vec2(0.72, 0.1)) * vec2(1.0, 0.8)));
     vec3 back = bg * 0.9 + uBack * (0.55 + 0.45 * window);
     vec3 liq = back * exp(-uSigma * thick);
@@ -162,14 +167,15 @@ void main() {
     // Cream: clouds that billow, curl and slowly blend in.
     if (uCream > 0.0) {
       vec2 q = uCreamTop > 0.5 ? vec2(w.x * 0.011, w.y * 0.0035) : w * 0.0032;
-      q.y -= t * 0.02;
+      q.y -= t * 0.05;
+      q.x += uShear * max(0.0, depth) * 0.0015;
       vec2 warp = vec2(fbm(q * 1.6 + t * 0.025), fbm(q * 1.6 - t * 0.02 + 3.7));
       float dens = fbm(q + 1.6 * warp);
       float lo = 0.6 - 0.3 * uCream;
       dens = smoothstep(lo, lo + 0.45, dens) * uCream;
       // Thin curling filaments: ridges of warped noise.
-      float fil = 1.0 - abs(2.0 * fbm(q * 3.0 + 2.4 * warp + vec2(uShift * 0.004, 0.0)) - 1.0);
-      dens += smoothstep(0.86, 0.97, fil) * 0.35 * uCream * exp(-max(0.0, depth) / 400.0);
+      // Softer secondary curls on top of the main billows.
+      dens += smoothstep(0.5, 0.8, fbm(q * 2.6 + 2.0 * warp + 5.0)) * 0.25 * uCream * exp(-max(0.0, depth) / 400.0);
       dens *= mix(1.0, exp(-max(0.0, depth) / 320.0), 0.6);
       if (uCreamTop > 0.5) dens *= exp(-max(0.0, depth) / 170.0) * exp(-pow((w.x - uCreamAt.x) / uCreamAt.y, 2.0));
       vec3 cream = uCreamCol * (0.75 + 0.25 * thick);
@@ -188,16 +194,24 @@ void main() {
 
     // A band of fine bright bubbles packed under a beer head.
     if (uSeamFizz > 0.0 && uHead == 1) {
-      vec2 cell = floor(vec2(w.x + uFoamShift * 0.3, depth) / 3.0);
-      vec2 f = fract(vec2(w.x + uFoamShift * 0.3, depth) / 3.0) - 0.5;
-      float r = 0.18 + 0.22 * hash(cell);
-      float dot1 = (1.0 - smoothstep(r - 0.12, r, length(f))) * step(0.35, hash(cell + 9.0));
-      liq = mix(liq, vec3(1.0, 0.97, 0.88), dot1 * uSeamFizz * exp(-max(0.0, depth) / 20.0));
+      float fz = 0.0;
+      for (int k = 0; k < 2; k++) {
+        float sc = k == 0 ? 3.5 : 6.0;
+        vec2 gp = vec2(w.x + uFoamShift * 0.3 + float(k) * 17.0, depth + float(k) * 5.0) / sc;
+        vec2 cell = floor(gp);
+        vec2 jit = vec2(hash(cell + 1.3), hash(cell + 7.7)) - 0.5;
+        vec2 f = fract(gp) - 0.5 - jit * 0.6;
+        float r = 0.1 + 0.18 * hash(cell);
+        float present = step(0.45 + 0.35 * noise(cell * 0.35), hash(cell + 9.0));
+        float fade = exp(-max(0.0, depth) / (12.0 + 30.0 * hash(cell + 4.0)));
+        fz += (1.0 - smoothstep(r - 0.08, r, length(f))) * present * fade;
+      }
+      liq = mix(liq, vec3(1.0, 0.97, 0.88), clamp(fz, 0.0, 1.0) * uSeamFizz * 0.9);
     }
 
     // Cream tendrils sinking from a creamy head.
     if (uTendrils > 0.0 && uHead > 0) {
-      vec2 tq = vec2(w.x * 0.025 + uFoamShift * 0.004, depth * 0.014 - t * 0.04);
+      vec2 tq = vec2(w.x * 0.025 + uFoamShift * 0.004 + uShear * depth * 0.002, depth * 0.014 - t * 0.09);
       tq += 1.5 * vec2(fbm(tq * 1.7 + t * 0.03), fbm(tq * 1.7 - t * 0.02 + 4.0));
       float m = smoothstep(0.52, 0.76, fbm(tq)) * exp(-max(0.0, depth) / 80.0) * uTendrils;
       liq = mix(liq, uHeadBot, m);
@@ -246,6 +260,7 @@ void main() {
     float lumpAmp = uHead == 1 ? 0.35 : (uHead == 2 ? 0.45 : 0.25);
     float lump = (fbm(vec2(w.x * 0.018 + uFoamShift * 0.004, t * 0.04)) - 0.5) * uFoamH * lumpAmp;
     float top = surf - uFoamH + lump;
+    if (uScoop.z > 0.0) top -= 10.0 * exp(-pow((w.x - uScoop.x) / (uScoop.z * 0.9), 2.0));
     float reach = uHead == 3 ? 8.0 : 16.0;
     if (w.y > top - 2.0 && w.y < surf + reach) {
       float hv = clamp((w.y - top) / max(1.0, surf - top), 0.0, 1.0);
@@ -261,7 +276,22 @@ void main() {
       vec2 cell = floor(hp);
       float life = fract(hash(cell) * 7.0 + t * (0.15 + hash(cell + 3.0) * 0.4));
       float round1 = 1.0 - smoothstep(0.15, 0.4, length(fract(hp) - 0.5));
-      h += vec3(0.07) * smoothstep(0.94, 1.0, life) * round1 * (1.0 - hv);
+      h += vec3(0.07) * smoothstep(0.94, 1.0, life) * round1 * (1.0 - hv) * (1.0 - uNoPops);
+      if (uScoop.z > 0.0) {
+        // The scoop shades the foam just below and beside it.
+        float dsc = length(vec2(w.x - uScoop.x, (w.y - uScoop.y - uScoop.z * 0.6) * 1.6));
+        h *= 1.0 - 0.3 * exp(-pow(dsc / (uScoop.z * 0.9), 2.0));
+      }
+      if (uHead == 3) {
+        // Crema: a thin glossy film; tiny tan bubbles crowd against the glass.
+        float wallD = min(w.x - uWet.x, uWet.y - w.x);
+        vec2 bp = vec2(w.x, w.y - top) / 2.5;
+        vec2 bc = floor(bp);
+        float bb = (1.0 - smoothstep(0.2, 0.42, length(fract(bp) - 0.5 - (vec2(hash(bc), hash(bc + 2.0)) - 0.5) * 0.4)))
+          * step(0.5, hash(bc + 5.0)) * (1.0 - smoothstep(0.0, 26.0, wallD));
+        h = mix(h, vec3(0.82, 0.62, 0.4), bb * 0.8);
+        h += vec3(0.12, 0.1, 0.08) * (1.0 - smoothstep(0.0, 3.0, w.y - top)) * noise(vec2(w.x * 0.05 + t * 0.3, 2.0));
+      }
       if (uCremaGloss > 0.0) h += vec3(1.0, 0.92, 0.8) * uCremaGloss * (1.0 - smoothstep(0.0, 1.6, w.y - top));
       float pore = noise(vec2(w.x * 0.35, t * 0.2 + w.y * 0.1));
       float rag = (fbm(vec2(w.x * 0.06 + uFoamShift * 0.01, t * 0.05)) - 0.5) * 10.0;
@@ -280,13 +310,16 @@ void main() {
       vec2 warp = vec2(fbm(q * 1.5 + t * 0.05), fbm(q * 1.5 - t * 0.04 + 2.0));
       float s = fbm(q + 1.4 * warp);
       float dens = smoothstep(0.42, 0.92, s) * exp(-above / 170.0) * smoothstep(0.0, 25.0, above);
-      col = mix(col, vec3(0.95, 0.94, 0.92), dens * 0.24);
+      col = mix(col, vec3(0.95, 0.94, 0.92), dens * 0.32);
     }
   }
 
   // The glass: refraction darkens the very edges, a fresnel reflection of the
   // room grows toward them, and highlights drift as the phone turns.
   col *= 1.0 - 0.38 * smoothstep(0.92, 1.0, abs(u));
+  float au = abs(u);
+  col += vec3(0.9, 0.92, 0.95) * (exp(-pow((au - 0.958) / 0.003, 2.0)) * 0.1 + exp(-pow((au - 0.988) / 0.002, 2.0)) * 0.16);
+  col *= 1.0 - exp(-pow((au - 0.972) / 0.004, 2.0)) * 0.18;
   vec3 refl = room(vec2(uP.x - p.x, p.y));
   col = mix(col, refl, 0.1 * pow(abs(u), 3.0));
   float xn = p.x / uP.x;
@@ -341,9 +374,10 @@ void main() {
   float dark = smoothstep(0.45, 0.75, r) * (1.0 - smoothstep(0.82, 0.95, r));
   float spec = 1.0 - smoothstep(0.0, 0.22, length(vLocal - vec2(-0.35, -0.38)));
   float crescent = smoothstep(0.55, 0.7, r) * (1.0 - smoothstep(0.78, 0.9, r)) * smoothstep(0.0, 0.6, vLocal.y);
-  vec3 c = uTint * (0.45 + rim * 0.45) + vec3(1.0) * spec + uTint * crescent * 0.4;
-  float a = clamp(0.22 + rim * 0.45 + spec * 0.95 + dark * 0.12, 0.0, 1.0);
-  c = mix(c, vec3(0.08, 0.04, 0.0), dark * 0.15);
+  float core = 1.0 - smoothstep(0.0, 0.85, r);
+  vec3 c = uTint * (0.35 + 0.25 * rim) * 0.6 + vec3(1.0) * spec + uTint * crescent * 0.3;
+  float a = clamp(core * 0.18 + rim * 0.22 + spec * 0.95, 0.0, 1.0);
+  c = mix(c, vec3(0.06, 0.03, 0.0), dark * 0.3);
   outColor = vec4(c * a, a);
 }`;
 
@@ -487,6 +521,9 @@ void main() {
     f1('uRipple', L.ripple);
     f1('uCremaGloss', L.cremaGloss || 0);
     v3('uWallGlow', L.wallGlow || [0, 0, 0]);
+    f1('uShear', s.shear);
+    v3('uScoop', s.scoop);
+    f1('uNoPops', L.noPops ? 1 : 0);
 
     const bind = (unit, key, name) => {
       gl.activeTexture(gl.TEXTURE0 + unit);
