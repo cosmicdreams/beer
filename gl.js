@@ -10,7 +10,7 @@ const GLR = (() => {
   let gl = null, prog = null, bubbleProg = null, quad = null, bubbleBuf = null;
   let loc = {}, bloc = {};
   const tex = {};
-  const WAVES = 64;
+  const WAVES = 128;
 
   const VERT = `#version 300 es
 in vec2 aPos;
@@ -73,6 +73,8 @@ uniform float uCondAbove;   // condensation strength on the dry glass above the 
 uniform vec2 uCreamAt;      // liquid-frame x and width where cream melts from (float)
 uniform float uRipple;
 uniform float uCremaGloss;
+uniform sampler2D uBubbles;  // bubbles, drawn first into their own layer
+uniform vec3 uWallGlow;
 
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec2 p) {
@@ -137,7 +139,10 @@ void main() {
     // Light from the room behind, bent by the surface and the moving liquid.
     float slope = surfaceAt(w.x + 3.0) - surfaceAt(w.x - 3.0);
     vec2 wob = vec2(fbm(p * 0.008 + vec2(t * 0.05, 0.0)) - 0.5, fbm(p * 0.008 + vec2(3.1, -t * 0.04)) - 0.5);
-    vec2 refr = p + vec2(-u * 22.0 * thick + uShift * 0.5, -10.0) + vec2(slope * 6.0, 0.0) + wob * 14.0;
+    // A cylinder of liquid is a lens: the room behind is flipped left to
+    // right, magnified, and squeezed toward the walls.
+    float lensX = c.x - c.x * 0.8 * sin(u * 1.3) / sin(1.3);
+    vec2 refr = vec2(lensX + uShift * 0.6, p.y - 12.0) + vec2(slope * 7.0, 0.0) + wob * 10.0;
     vec3 bg = room(refr);
     float window = smoothstep(0.9, 0.0, length((p / uP - vec2(0.72, 0.1)) * vec2(1.0, 0.8)));
     vec3 back = bg * 0.9 + uBack * (0.55 + 0.45 * window);
@@ -162,6 +167,9 @@ void main() {
       float dens = fbm(q + 1.6 * warp);
       float lo = 0.6 - 0.3 * uCream;
       dens = smoothstep(lo, lo + 0.45, dens) * uCream;
+      // Thin curling filaments: ridges of warped noise.
+      float fil = 1.0 - abs(2.0 * fbm(q * 3.0 + 2.4 * warp + vec2(uShift * 0.004, 0.0)) - 1.0);
+      dens += smoothstep(0.86, 0.97, fil) * 0.35 * uCream * exp(-max(0.0, depth) / 400.0);
       dens *= mix(1.0, exp(-max(0.0, depth) / 320.0), 0.6);
       if (uCreamTop > 0.5) dens *= exp(-max(0.0, depth) / 170.0) * exp(-pow((w.x - uCreamAt.x) / uCreamAt.y, 2.0));
       vec3 cream = uCreamCol * (0.75 + 0.25 * thick);
@@ -176,6 +184,7 @@ void main() {
     // Glow under the surface for dark drinks, and gentle loss of light with depth.
     liq += uSurfGlow * exp(-max(0.0, depth) / max(1.0, uSurfGlowDepth));
     liq *= 1.0 - 0.22 * smoothstep(0.0, uP.y, depth);
+    liq += uWallGlow * smoothstep(0.62, 1.0, abs(u)) * (0.6 + 0.4 * noise(p * 0.01 + t * 0.05));
 
     // A band of fine bright bubbles packed under a beer head.
     if (uSeamFizz > 0.0 && uHead == 1) {
@@ -183,27 +192,32 @@ void main() {
       vec2 f = fract(vec2(w.x + uFoamShift * 0.3, depth) / 3.0) - 0.5;
       float r = 0.18 + 0.22 * hash(cell);
       float dot1 = (1.0 - smoothstep(r - 0.12, r, length(f))) * step(0.35, hash(cell + 9.0));
-      liq = mix(liq, vec3(1.0, 0.97, 0.88), dot1 * uSeamFizz * exp(-max(0.0, depth) / 9.0) * 0.85);
+      liq = mix(liq, vec3(1.0, 0.97, 0.88), dot1 * uSeamFizz * exp(-max(0.0, depth) / 20.0));
     }
 
     // Cream tendrils sinking from a creamy head.
     if (uTendrils > 0.0 && uHead > 0) {
-      float td = fbm(vec2(w.x * 0.11 + uFoamShift * 0.01 + sin(depth * 0.02 + t * 0.3), depth * 0.01 - t * 0.05));
-      float m = smoothstep(0.58, 0.85, td) * exp(-max(0.0, depth) / 55.0) * uTendrils * 0.8;
+      vec2 tq = vec2(w.x * 0.025 + uFoamShift * 0.004, depth * 0.014 - t * 0.04);
+      tq += 1.5 * vec2(fbm(tq * 1.7 + t * 0.03), fbm(tq * 1.7 - t * 0.02 + 4.0));
+      float m = smoothstep(0.52, 0.76, fbm(tq)) * exp(-max(0.0, depth) / 80.0) * uTendrils;
       liq = mix(liq, uHeadBot, m);
     }
 
     // Meniscus where nothing covers the surface: a lit lip, a dark band from
     // total internal reflection, a moving glint.
     if (uHead == 0) {
-      float lip = 1.0 - smoothstep(0.0, 3.0, depth);
-      float dark = smoothstep(2.0, 4.5, depth) * (1.0 - smoothstep(5.0, 12.0, depth));
-      liq = mix(liq, uMenLip, lip * 0.55);
-      liq = mix(liq, uMenDark, dark * (uClear > 0.5 ? 0.25 : 0.55));
-      float gl = (1.0 - smoothstep(0.0, 1.4, abs(depth - 0.6))) * (0.4 + 0.6 * noise(vec2(w.x * 0.02 + t * 0.4, 0.0)));
-      liq += uMenGlint * gl * 0.6;
+      // Seen from below, the surface mirrors the liquid: a silvery band.
+      float band = smoothstep(1.0, 3.0, depth) * (1.0 - smoothstep(6.0, 13.0, depth));
+      vec3 mirror = room(vec2(lensX, p.y + 40.0 + depth * 3.0)) * 1.15 + 0.06;
+      liq = mix(liq, mirror * mix(vec3(1.0), uMenLip, 0.5), band * (uClear > 0.5 ? 0.5 : 0.3));
+      liq = mix(liq, uMenDark, smoothstep(10.0, 13.0, depth) * (1.0 - smoothstep(13.0, 20.0, depth)) * 0.2);
+      float hl = (1.0 - smoothstep(0.0, 1.0, abs(depth - 0.4))) * smoothstep(0.35, 0.75, noise(vec2(w.x * 0.03 + t * 0.3, 1.0)));
+      liq += uMenGlint * hl * 0.35;
+      liq += uMenGlint * smoothstep(0.4, 1.4, abs(slope)) * (1.0 - smoothstep(0.0, 8.0, depth)) * 0.25;
     }
 
+    vec4 bub = texture(uBubbles, gl_FragCoord.xy / uRes);
+    liq = liq * (1.0 - bub.a) + bub.rgb;
     float edge = smoothstep(-2.0, 0.8, depth);
     col = mix(col, liq, edge);
   }
@@ -229,7 +243,7 @@ void main() {
   // The head: foam, cream or crema, sampled from its photo through moving
   // noise, with lit top, soft base that melts into the drink, and popping cells.
   if (wet && uHead > 0) {
-    float lumpAmp = uHead == 1 ? 0.35 : (uHead == 2 ? 0.45 : 0.08);
+    float lumpAmp = uHead == 1 ? 0.35 : (uHead == 2 ? 0.45 : 0.25);
     float lump = (fbm(vec2(w.x * 0.018 + uFoamShift * 0.004, t * 0.04)) - 0.5) * uFoamH * lumpAmp;
     float top = surf - uFoamH + lump;
     float reach = uHead == 3 ? 8.0 : 16.0;
@@ -249,7 +263,10 @@ void main() {
       float round1 = 1.0 - smoothstep(0.15, 0.4, length(fract(hp) - 0.5));
       h += vec3(0.07) * smoothstep(0.94, 1.0, life) * round1 * (1.0 - hv);
       if (uCremaGloss > 0.0) h += vec3(1.0, 0.92, 0.8) * uCremaGloss * (1.0 - smoothstep(0.0, 1.6, w.y - top));
-      float a = smoothstep(top - 1.0, top + 1.2, w.y) * (1.0 - smoothstep(surf - 2.0, surf + reach, w.y));
+      float pore = noise(vec2(w.x * 0.35, t * 0.2 + w.y * 0.1));
+      float rag = (fbm(vec2(w.x * 0.06 + uFoamShift * 0.01, t * 0.05)) - 0.5) * 10.0;
+      h = mix(h, h * 0.86, smoothstep(surf - 6.0 + rag, surf + reach + rag, w.y));
+      float a = smoothstep(top - 1.5, top + 1.5 + 2.5 * pore, w.y) * (1.0 - smoothstep(surf - 4.0 + rag, surf + reach + rag, w.y));
       col = mix(col, h, a);
     }
   }
@@ -285,8 +302,11 @@ void main() {
     float aspect = (uP.x / uP.y) / (768.0 / 1152.0);
     cuv.x = (cuv.x - 0.5) * aspect + 0.5 + (uCondMap.z - 0.5) * (1.0 - aspect);
     vec3 m = texture(uCond, cuv).rgb;
+    float above1 = texture(uCond, cuv - vec2(0.0, 0.004)).r;
     float where = wet ? mix(uCondAbove, 1.0, smoothstep(-14.0, 14.0, depth)) : uCondAbove;
-    col = 1.0 - (1.0 - col) * (1.0 - m * uCondAmt * where);
+    // Each bead refracts: its lower rim goes dark, its highlight stays bright.
+    col *= 1.0 - clamp(above1 - m.r, 0.0, 1.0) * 0.7 * uCondAmt * where;
+    col = 1.0 - (1.0 - col) * (1.0 - m * 0.8 * uCondAmt * where);
   }
 
   float vig = smoothstep(1.25, 0.35, length((p / uP - 0.5) * vec2(1.0, 0.8)));
@@ -408,6 +428,7 @@ void main() {
   const rgb = (s) => s.match(/[\d.]+/g).slice(0, 3).map(v => Number(v) / 255);
 
   function render(s) {
+    drawBubbles(s);
     gl.useProgram(prog);
     gl.bindBuffer(gl.ARRAY_BUFFER, quad);
     const aPos = gl.getAttribLocation(prog, 'aPos');
@@ -465,6 +486,7 @@ void main() {
     v2('uCreamAt', s.creamAt[0], s.creamAt[1]);
     f1('uRipple', L.ripple);
     f1('uCremaGloss', L.cremaGloss || 0);
+    v3('uWallGlow', L.wallGlow || [0, 0, 0]);
 
     const bind = (unit, key, name) => {
       gl.activeTexture(gl.TEXTURE0 + unit);
@@ -476,9 +498,34 @@ void main() {
     bind(2, 'body', 'uBody');
     bind(3, 'head', 'uHeadTex');
     bind(4, 'float', 'uFloat');
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_2D, bubbleTex);
+    i1('uBubbles', 5);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
 
-    // Bubbles on top, blended.
+  // Bubbles go into their own layer first, so the main pass can put them
+  // inside the liquid, under the glass and condensation.
+  let bubbleFbo = null, bubbleTex = null, fboW = 0, fboH = 0;
+  function drawBubbles(s) {
+    const W = gl.canvas.width, H = gl.canvas.height;
+    if (!bubbleFbo || fboW !== W || fboH !== H) {
+      bubbleTex = bubbleTex || gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, bubbleTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      bubbleFbo = bubbleFbo || gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, bubbleFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, bubbleTex, 0);
+      fboW = W; fboH = H;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bubbleFbo);
+    gl.viewport(0, 0, W, H);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
     const n = s.bubbles.length / 3;
     if (n > 0) {
       gl.useProgram(bubbleProg);
@@ -503,6 +550,8 @@ void main() {
       gl.vertexAttribDivisor(aBubble, 0);
       gl.disableVertexAttribArray(aBubble);
     }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, W, H);
   }
 
   return { init, setTexture, updateLayer, resize, render, rgb, WAVES, get ok() { return !!gl; } };

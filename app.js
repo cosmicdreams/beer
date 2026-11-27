@@ -31,7 +31,7 @@ const params = new URLSearchParams(location.search);
 // foam cell tint), fizz, condensation, steam, and whether it earns a burp.
 const DRINKS = {
   beer: {
-    gl: { seamFizz: 1, ripple: 0.12, sigma: [0.16, 0.62, 2.1], back: [0.95, 0.78, 0.47], scatter: [0.05, 0.03, 0.0], bodyMix: 0.5, bodyGain: [0.98, 0.92, 0.82], flow: 0.012, caustic: [0.1, 0.08, 0.025], surfGlow: [0.12, 0.08, 0.0], surfGlowDepth: 40, tendrils: 0 },
+    gl: { seamFizz: 1, ripple: 0.12, sigma: [0.16, 0.66, 2.2], back: [0.78, 0.64, 0.38], scatter: [0.02, 0.01, 0.0], bodyMix: 0.5, bodyGain: [0.98, 0.92, 0.82], flow: 0.012, caustic: [0.1, 0.08, 0.025], surfGlow: [0.12, 0.08, 0.0], surfGlowDepth: 40, tendrils: 0 },
     title: 'BEER', unit: ['beer', 'beers'], head: 'foam',
     body: ['#f9c53a', '#eea31c', '#cc760c', '#7a3a05'],
     glow: 'rgba(255, 224, 102, 0.42)', glowAt: 'center', band: '255, 215, 90', bandAlpha: 0.35,
@@ -40,7 +40,7 @@ const DRINKS = {
     headScale: 0.3, headLift: 0.22, rise: [0, 0], photoHaze: 'rgba(255, 210, 80, 0.2)', seam: '232, 184, 74', fresh: 0.11, fizz: 1, drops: 1, burp: true, pour: ['#c06a0e', '#f4b52a', '#ffe08a'],
   },
   butterbeer: {
-    gl: { ripple: 0.12, sigma: [0.45, 1.25, 2.8], back: [0.95, 0.8, 0.5], scatter: [0.24, 0.14, 0.04], bodyMix: 0.35, bodyGain: [1.05, 1.0, 0.95], flow: 0.035, caustic: [0.08, 0.06, 0.02], surfGlow: [0.15, 0.1, 0.03], surfGlowDepth: 50, tendrils: 0.75 },
+    gl: { ripple: 0.12, headTop: [0.95, 0.9, 0.8], headBot: [0.91, 0.83, 0.66], sigma: [0.55, 1.35, 3.1], back: [0.88, 0.72, 0.44], scatter: [0.2, 0.12, 0.04], bodyMix: 0.3, bodyGain: [1.05, 1.0, 0.95], flow: 0.035, caustic: [0.08, 0.06, 0.02], surfGlow: [0.15, 0.1, 0.03], surfGlowDepth: 50, tendrils: 0.75 },
     title: 'BUTTERBEER', unit: ['butterbeer', 'butterbeers'], head: 'cream',
     body: ['#c8862e', '#b07228', '#8a4e16', '#4a2608'],
     glow: 'rgba(255, 214, 120, 0.34)', glowAt: 'center', band: '255, 236, 200', bandAlpha: 0,
@@ -49,7 +49,7 @@ const DRINKS = {
     headScale: 0.48, headWash: 'rgba(246, 229, 192, 0.45)', rise: [4, 0], swirl: true, seam: '243, 213, 155', fresh: 0.04, fizz: 0.45, drops: 1, burp: true, pour: ['#a8681e', '#e9b45c', '#fbe0a8'],
   },
   rootbeer: {
-    gl: { seamFizz: 0.5, ripple: 0.12, condAmt: 0.5, sigma: [2.2, 4.2, 6.0], back: [1.0, 0.72, 0.46], scatter: [0.02, 0.005, 0.0], bodyMix: 0.3, bodyGain: [1.0, 0.9, 0.85], flow: 0.03, caustic: [0.06, 0.025, 0.008], surfGlow: [0.24, 0.11, 0.03], surfGlowDepth: 55, tendrils: 0 },
+    gl: { seamFizz: 0.5, ripple: 0.12, condAmt: 0.3, wallGlow: [0.15, 0.045, 0.012], sigma: [2.2, 4.2, 6.0], back: [1.0, 0.72, 0.46], scatter: [0.02, 0.005, 0.0], bodyMix: 0.3, bodyGain: [1.0, 0.9, 0.85], flow: 0.03, caustic: [0.06, 0.025, 0.008], surfGlow: [0.24, 0.11, 0.03], surfGlowDepth: 55, tendrils: 0 },
     title: 'ROOT BEER', unit: ['root beer', 'root beers'], head: 'foam',
     body: ['#3a1206', '#1e0802', '#0f0401', '#070100'],
     glow: 'rgba(150, 60, 24, 0.55)', glowAt: 'surface', glowDepth: 60, band: '200, 120, 70', bandAlpha: 0,
@@ -58,7 +58,7 @@ const DRINKS = {
     headScale: 0.3, rise: [0, 0], darkMask: true, seam: '184, 124, 66', fresh: 0.07, fizz: 0.9, drops: 1, burp: true, pour: ['#1a0602', '#4a1a08', '#9a4a24'],
   },
   wine: {
-    gl: { ripple: 0.06, sigma: [2.2, 6.0, 5.0], back: [1.0, 0.9, 0.86], scatter: [0.01, 0.0, 0.003], bodyMix: 0, bodyGain: [1, 1, 1], flow: 0, caustic: [0.05, 0.005, 0.015], surfGlow: [0.2, 0.025, 0.05], surfGlowDepth: 40, tendrils: 0, menLip: [0.56, 0.1, 0.17], menDark: [0.08, 0.0, 0.02], menGlint: [1.0, 0.85, 0.9] },
+    gl: { ripple: 0.06, wallGlow: [0.15, 0.012, 0.035], sigma: [2.2, 6.0, 5.0], back: [1.0, 0.9, 0.86], scatter: [0.01, 0.0, 0.003], bodyMix: 0, bodyGain: [1, 1, 1], flow: 0, caustic: [0.05, 0.005, 0.015], surfGlow: [0.2, 0.025, 0.05], surfGlowDepth: 40, tendrils: 0, menLip: [0.56, 0.1, 0.17], menDark: [0.08, 0.0, 0.02], menGlint: [1.0, 0.85, 0.9] },
     title: 'WINE', unit: ['glass of wine', 'glasses of wine'], head: 'none',
     body: ['#8e1430', '#3c0612', '#2a0510', '#140105'],
     glow: 'rgba(196, 25, 63, 0.45)', glowAt: 'surface', glowDepth: 90, ruby: true, band: '140, 30, 60', bandAlpha: 0,
@@ -77,12 +77,12 @@ const DRINKS = {
     foam: 0, fresh: 0, fizz: 0, drops: 1, burp: false, pour: ['#8fb4c2', '#d8eef5', '#ffffff'],
   },
   coffee: {
-    gl: { ripple: 0.08, cremaGloss: 0.18, headTop: [0.66, 0.42, 0.2], headBot: [0.2, 0.09, 0.03], sigma: [3.4, 5.4, 7.0], back: [1.0, 0.78, 0.55], scatter: [0.0, 0.0, 0.0], bodyMix: 0.25, bodyGain: [1.0, 0.95, 0.9], flow: 0.03, caustic: [0.04, 0.02, 0.005], surfGlow: [0.2, 0.09, 0.03], surfGlowDepth: 60, tendrils: 0, creamCol: [0.9, 0.8, 0.66] },
+    gl: { ripple: 0.08, cremaGloss: 0.12, wallGlow: [0.11, 0.045, 0.012], headTop: [0.66, 0.42, 0.2], headBot: [0.2, 0.09, 0.03], sigma: [3.4, 5.4, 7.0], back: [1.0, 0.78, 0.55], scatter: [0.0, 0.0, 0.0], bodyMix: 0.25, bodyGain: [1.0, 0.95, 0.9], flow: 0.03, caustic: [0.04, 0.02, 0.005], surfGlow: [0.2, 0.09, 0.03], surfGlowDepth: 60, tendrils: 0, creamCol: [0.9, 0.8, 0.66] },
     title: 'COFFEE', unit: ['coffee', 'coffees'], head: 'crema',
     body: ['#24120a', '#160a04', '#0d0602', '#060200'],
     glow: 'rgba(110, 44, 11, 0.55)', glowAt: 'surface', glowDepth: 70, band: '150, 95, 55', bandAlpha: 0,
     walls: 'lit', edge: '138, 60, 18', milk: 0, wallWidth: 0.1,
-    foam: 0.012, grainAmount: 0.25, foamShade: ['#c48a52', '#a8703e', '#8a552a'], speck: '217, 166, 106', grain: '90, 50, 20',
+    foam: 0.011, grainAmount: 0.25, foamShade: ['#c48a52', '#a8703e', '#8a552a'], speck: '217, 166, 106', grain: '90, 50, 20',
     headScale: 0.2, headTint: 'rgba(120, 61, 20, 0.3)', bodyTint: 'rgba(16, 7, 2, 0.4)', caustic: '143, 69, 24', causticAlpha: 0.08, fresh: 0.003, fizz: 0, drops: 0, steam: true, burp: false, pour: ['#0d0602', '#2b1608', '#6a3e1e'],
   },
 };
@@ -98,7 +98,7 @@ const MODS = {
       gl: { cream: true, creamCol: [0.9, 0.8, 0.66], sigma: [1.8, 2.7, 3.6], scatter: [0.16, 0.1, 0.05] },
     }) },
     coldfoam: { label: 'Cold foam', apply: () => ({
-      head: 'cream', foam: 0.09, headTex: 'beer-head', headScale: 0.32, headLift: 0.28,
+      head: 'cream', foam: 0.09, headTex: 'butterbeer-head', headScale: 0.5, headLift: 0.28,
       headTint: null, foamShade: ['#fffdf8', '#f8f1e4', '#e9dcc3'], speck: '255, 255, 255', grain: '200, 180, 150',
       seam: '214, 190, 160', fresh: 0.02, steam: false,
       gl: { tendrils: 0.6, headTop: [0.98, 0.96, 0.92], headBot: [0.88, 0.83, 0.75], cremaGloss: 0 },
@@ -123,7 +123,7 @@ const MODS = {
       body: ['#f2e2a0', '#e6cf7c', '#d6b65a', '#a8822e'], glow: 'rgba(255, 244, 190, 0.45)',
       edge: '240, 214, 140', caustic: '255, 248, 210', causticAlpha: 0.16, ruby: false, drops: 0.6,
       meniscus: { lip: '255, 246, 214', dark: '90, 70, 20', glint: '255, 255, 240' }, legTint: '220, 190, 110',
-      gl: { condAmt: 0.35, sigma: [0.07, 0.13, 0.55], back: [0.3, 0.28, 0.22], caustic: [0.1, 0.09, 0.05], surfGlow: [0.06, 0.05, 0.01], menLip: [1.0, 0.96, 0.8], menDark: [0.3, 0.25, 0.1], menGlint: [1, 1, 0.94] },
+      gl: { condAmt: 0.3, sigma: [0.05, 0.1, 0.48], back: [0.45, 0.42, 0.3], caustic: [0.1, 0.09, 0.05], surfGlow: [0.06, 0.05, 0.01], menLip: [1.0, 0.96, 0.8], menDark: [0.3, 0.25, 0.1], menGlint: [1, 1, 0.94] },
       pour: ['#a8822e', '#e6cf7c', '#fff4c8'], clear: true, clearTint: 'rgba(240, 205, 90, 0.4)', clearGlow: 'rgba(150, 120, 30, 0.55)', menLipHex: null,
     }) },
     rose: { label: 'Rosé', group: 'wine', apply: () => ({
@@ -131,7 +131,7 @@ const MODS = {
       body: ['#f4a3a8', '#e5848f', '#cc6377', '#8e3a4e'], glow: 'rgba(255, 190, 200, 0.45)',
       edge: '245, 160, 170', caustic: '255, 214, 220', causticAlpha: 0.16, ruby: false, drops: 0.6,
       meniscus: { lip: '255, 220, 226', dark: '110, 40, 55', glint: '255, 250, 252' }, legTint: '230, 130, 150',
-      gl: { condAmt: 0.35, sigma: [0.06, 0.42, 0.32], back: [0.3, 0.27, 0.27], caustic: [0.1, 0.06, 0.06], surfGlow: [0.08, 0.02, 0.03], menLip: [1.0, 0.82, 0.86], menDark: [0.35, 0.12, 0.18], menGlint: [1, 0.96, 0.97] },
+      gl: { condAmt: 0.25, sigma: [0.04, 0.32, 0.24], back: [0.48, 0.38, 0.4], caustic: [0.1, 0.06, 0.06], surfGlow: [0.08, 0.02, 0.03], menLip: [1.0, 0.82, 0.86], menDark: [0.35, 0.12, 0.18], menGlint: [1, 0.96, 0.97] },
       pour: ['#8e3a4e', '#e5848f', '#ffd6dc'], clear: true, clearTint: 'rgba(236, 110, 132, 0.42)', clearGlow: 'rgba(160, 60, 80, 0.5)',
     }) },
   },
@@ -589,7 +589,7 @@ function foamHeight() {
 // The surface is a small wave simulation across the glass: tilting, stopping,
 // shaking or tapping sends waves that run to the walls, bounce and settle, and
 // a faint tremor keeps it from ever going perfectly still.
-const WN = 64;
+const WN = 128;
 const waveH = new Float32Array(WN);
 const waveV = new Float32Array(WN);
 let prevAngleV = 0;
@@ -598,12 +598,15 @@ let shake = 0;
 function stepWaves(dt) {
   const acc = (angleV - prevAngleV) / dt;
   prevAngleV = angleV;
-  const steps = 4, h = dt / steps;
+  const steps = 8, h = dt / steps;
   for (let n = 0; n < steps; n++) {
     for (let i = 0; i < WN; i++) {
-      const l = waveH[i > 0 ? i - 1 : 1], r = waveH[i < WN - 1 ? i + 1 : WN - 2];
+      const im = i > 0 ? i - 1 : 1, ip = i < WN - 1 ? i + 1 : WN - 2;
       const x = i / (WN - 1) - 0.5;
-      waveV[i] += ((l + r - 2 * waveH[i]) * 900 - waveV[i] * 1.4 - Math.max(-80, Math.min(80, acc)) * x * 5) * h;
+      const lapH = waveH[im] + waveH[ip] - 2 * waveH[i];
+      const lapV = waveV[im] + waveV[ip] - 2 * waveV[i];
+      // Stiffness, damping, and viscosity that kills short ripples fastest.
+      waveV[i] += (lapH * 3600 - waveV[i] * 1.2 + lapV * 25 - Math.max(-80, Math.min(80, acc)) * x * 5) * h;
     }
     for (let i = 0; i < WN; i++) waveH[i] += waveV[i] * h;
   }
@@ -619,7 +622,7 @@ function stepWaves(dt) {
 function poke(x, strength) {
   const span = Math.max(1, surfR - surfL);
   const c = (x - surfL) / span * (WN - 1);
-  for (let i = 0; i < WN; i++) waveV[i] -= strength * Math.exp(-((i - c) ** 2) / 6);
+  for (let i = 0; i < WN; i++) waveV[i] -= strength * Math.exp(-((i - c) ** 2) / 2.5) * Math.cos((i - c) * 1.2);
 }
 
 function wave(x) {
@@ -836,9 +839,9 @@ function updateLegs(dt, level) {
   if ((receding || slosh > 0.15) && legTimer <= 0 && beer > 0.02) {
     legTimer = 0.5;
     const wx = (Math.random() - 0.5) * D;
-    const p = toScreen(wx, level - 15 - Math.random() * 75);
+    const p = toScreen(wx, level - 4 - Math.random() * 30);
     if (p.x > 8 && p.x < PW - 8 && p.y > 0 && legs.length < 18) {
-      legs.push({ x: p.x, y0: p.y, len: 0, max: 30 + Math.random() * 40, w: 2 + Math.random() * 1.5, bend: (Math.random() - 0.5) * 3, life: 1 });
+      legs.push({ x: p.x, y0: p.y, len: 0, max: 30 + Math.random() * 50, w: 2 + Math.random() * 2, bend: (Math.random() - 0.5) * 3, life: 1 });
     }
   }
   lastTopY = crest;
@@ -856,8 +859,8 @@ function drawLegs() {
     // A faint film from the wet line, a tinted tear with a lit left edge, and a bead.
     const film = ctx.createLinearGradient(0, l.y0, 0, end);
     const lt = drink.legTint || '150, 25, 50';
-    film.addColorStop(0, `rgba(${lt}, ${0.1 * a})`);
-    film.addColorStop(1, `rgba(${lt}, ${0.22 * a})`);
+    film.addColorStop(0, `rgba(${lt}, ${0.05 * a})`);
+    film.addColorStop(1, `rgba(${lt}, ${0.25 * a})`);
     ctx.strokeStyle = film;
     ctx.lineWidth = l.w;
     ctx.lineCap = 'round';
@@ -886,7 +889,7 @@ function drawSlides() {
     const a = Math.min(1, d.life);
     const track = ctx.createLinearGradient(0, d.y0, 0, d.y);
     track.addColorStop(0, 'rgba(255, 255, 255, 0)');
-    track.addColorStop(1, `rgba(255, 255, 255, ${0.1 * a})`);
+    track.addColorStop(1, `rgba(255, 255, 255, ${0.04 * a})`);
     ctx.strokeStyle = track;
     ctx.lineWidth = d.r * 1.2;
     ctx.lineCap = 'round';
@@ -1003,7 +1006,7 @@ function drawGL(level) {
   const hasFloat = !!(TEX.lemon || TEX.ice || TEX.scoop) && drawFloatLayer(level);
   if (hasFloat) GLR.updateLayer('float', floatLayer);
   GLR.render({
-    hasFloat, condAbove: 0.3, creamAt: [PW * 0.08 + liquidShift * 0.5, 90],
+    hasFloat, condAbove: 0.08, creamAt: [PW * 0.08 + liquidShift * 0.5, 90],
     dpr: Math.min(2, dpr), PW, PH, time: clock, angle, level, fill: beer > 0.002 ? 1 : 0,
     inv: [inv.a, inv.b, 0, inv.c, inv.d, 0, inv.e, inv.f, 1],
     fwd: [m.a, m.b, 0, m.c, m.d, 0, m.e, m.f, 1],
@@ -1022,7 +1025,7 @@ function drawGL(level) {
       head: { foam: 1, cream: 2, crema: 3 }[drink.head] || 0, headScale: 1 / (drink.headScale || 0.3),
       headTop: g.headTop || hexRgb(shade[0]), headBot: g.headBot || hexRgb(shade[2]), headLift: drink.headLift || 0.15,
       tendrils: g.tendrils || 0, steam: !!drink.steam,
-      seamFizz: g.seamFizz || 0, ripple: g.ripple ?? 0.12, cremaGloss: g.cremaGloss || 0,
+      seamFizz: g.seamFizz || 0, ripple: g.ripple ?? 0.12, cremaGloss: g.cremaGloss || 0, wallGlow: g.wallGlow,
     },
   });
 
@@ -1317,7 +1320,15 @@ function splitIce(src) {
     const c = document.createElement('canvas');
     c.width = Math.round(src.width * (b - a));
     c.height = Math.round(src.height * 0.7);
-    c.getContext('2d').drawImage(src, -src.width * a, -src.height * 0.18);
+    const g = c.getContext('2d');
+    g.drawImage(src, -src.width * a, -src.height * 0.18);
+    // Feather the cut edges.
+    g.globalCompositeOperation = 'destination-in';
+    const m = g.createRadialGradient(c.width / 2, c.height / 2, Math.min(c.width, c.height) * 0.42, c.width / 2, c.height / 2, Math.max(c.width, c.height) * 0.62);
+    m.addColorStop(0, 'rgba(0, 0, 0, 1)');
+    m.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    g.fillStyle = m;
+    g.fillRect(0, 0, c.width, c.height);
     return c;
   });
 }
@@ -1349,16 +1360,16 @@ function drawFloatLayer(level) {
     g.drawImage(img, -w / 2, -h / 2, w, h);
     g.restore();
   };
-  if (TEX.lemon) place(TEX.lemon, -PW * 0.1 + liquidShift * 0.6 + Math.sin(clock * 0.13) * 8, 0.02, PW * 0.4, 3, 0.04);
+  if (TEX.lemon) place(TEX.lemon, -PW * 0.1 + liquidShift * 0.6 + Math.sin(clock * 0.13) * 8, 0.3, PW * 0.4, 3, 0.04);
   iceCubes.forEach((c, i) => {
     const x = (i - 1) * PW * 0.27 + liquidShift * (0.7 + i * 0.15) + Math.sin(clock * (0.17 + i * 0.05) + i * 2) * 10;
-    place(c, x, 0.3, PW * 0.3, i * 1.7, 0.06);
+    place(c, x, 0.36 + 0.04 * i, PW * (0.27 + 0.03 * (i % 2)), i * 1.7, 0.06 + 0.03 * i);
   });
   if (TEX.scoop) {
     const x = PW * 0.08 + liquidShift * 0.5;
     const s = PW * 0.5;
     g.save();
-    g.translate(x, level - foamHeight() - s * 0.08 + Math.sin(clock * 0.9) * 1.2);
+    g.translate(x, level - foamHeight() + s * 0.1 + Math.sin(clock * 0.9) * 1.2);
     g.rotate(Math.atan(slope(x)) * 0.5);
     g.drawImage(TEX.scoop, -s / 2, -s / 2, s, s);
     // Its underside is in shadow where it sits in the foam.
@@ -1368,6 +1379,8 @@ function drawFloatLayer(level) {
     g.globalCompositeOperation = 'source-atop';
     g.fillStyle = sh;
     g.fillRect(-s / 2, 0, s, s / 2);
+    g.fillStyle = 'rgba(70, 45, 20, 0.14)';
+    g.fillRect(-s / 2, -s / 2, s, s);
     g.restore();
   }
   return true;
@@ -2166,7 +2179,14 @@ canvas.addEventListener('pointerdown', e => {
   const m = new DOMMatrix().translate(W / 2, H / 2).rotate(-screenAngle).translate(-PW / 2, -PH / 2).inverse();
   const pt = m.transformPoint(new DOMPoint(e.clientX - r.left, e.clientY - r.top));
   poke(toWorld(pt.x, pt.y).x, 120);
-  if (drink.fizz > 0) for (let i = 0; i < 25; i++) bubbles.push(newBubble(pt.x + (Math.random() - 0.5) * 40, pt.y + (Math.random() - 0.5) * 40, 1 + Math.random() * 1.5));
+  if (drink.fizz > 0) {
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2, d = Math.pow(Math.random(), 0.6) * 90;
+      const b = newBubble(pt.x + Math.cos(a) * d * 0.7, pt.y + Math.sin(a) * d, 0.5 + Math.random() * 1.3);
+      b.v = 20 + Math.random() * 90;
+      bubbles.push(b);
+    }
+  }
 });
 let lastAcc = null;
 window.addEventListener('devicemotion', e => {
